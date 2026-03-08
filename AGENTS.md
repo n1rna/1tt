@@ -10,6 +10,7 @@ A collection of browser-based developer tools built with Next.js. Each tool is s
 - **Tailwind CSS v4** (PostCSS plugin, `@plugin` directive for extensions)
 - **shadcn/ui** (base-nova style, built on `@base-ui/react` — NOT Radix)
 - **lucide-react** for icons
+- **Bun** as the package manager and script runner (not npm/yarn/pnpm)
 - **Playwright** for e2e tests, **Vitest** for unit tests
 - **next-themes** for dark/light mode (dark by default)
 
@@ -63,16 +64,22 @@ Create `src/app/tools/my-tool/page.tsx`:
 
 ```tsx
 import { MyTool } from "@/components/tools/my-tool";
-import type { Metadata } from "next";
+import { toolMetadata, toolJsonLd } from "@/lib/tools/seo";
 
-export const metadata: Metadata = {
-  title: "My Tool — 1two.dev",
-  description: "Tool description",
-};
+export const metadata = toolMetadata({
+  slug: "my-tool",
+  title: "My Tool — Keyword-Rich Title",
+  description: "Keyword-rich description (150+ chars) targeting search queries users would type.",
+  keywords: ["my tool", "related term", "search phrase"],
+});
 
 export default function MyToolPage() {
+  const jsonLd = toolJsonLd("my-tool");
   return (
     <>
+      {jsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      )}
       <style>{`body { overflow: hidden; }`}</style>
       <MyTool />
     </>
@@ -85,16 +92,22 @@ export default function MyToolPage() {
 ```tsx
 import { ToolLayout } from "@/components/layout/tool-layout";
 import { MyTool } from "@/components/tools/my-tool";
-import type { Metadata } from "next";
+import { toolMetadata, toolJsonLd } from "@/lib/tools/seo";
 
-export const metadata: Metadata = {
-  title: "My Tool — 1two.dev",
-  description: "Tool description",
-};
+export const metadata = toolMetadata({
+  slug: "my-tool",
+  title: "My Tool — Keyword-Rich Title",
+  description: "Keyword-rich description (150+ chars) targeting search queries users would type.",
+  keywords: ["my tool", "related term", "search phrase"],
+});
 
 export default function MyToolPage() {
+  const jsonLd = toolJsonLd("my-tool");
   return (
     <ToolLayout slug="my-tool">
+      {jsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      )}
       <MyTool />
     </ToolLayout>
   );
@@ -182,8 +195,8 @@ describe("processInput", () => {
 ### 6. Run tests
 
 ```bash
-npx playwright test e2e/my-tool.spec.ts   # e2e tests
-npx vitest run src/lib/tools/__tests__/    # unit tests
+bunx playwright test e2e/my-tool.spec.ts   # e2e tests
+bunx vitest run src/lib/tools/__tests__/    # unit tests
 ```
 
 ## Split-Pane Editor Pattern
@@ -270,3 +283,6 @@ The invisible mirror text wraps identically to the textarea, so each grid row's 
 - **shadcn/ui uses @base-ui/react**, not Radix — component APIs may differ from standard shadcn docs
 - **No `--no-verify`** on git commits — always let hooks run
 - **Keep it simple** — avoid over-engineering, no premature abstractions
+- **Use `bun`** for all package management and script running — never npm/yarn/pnpm
+- **Static export** — `output: "export"` in next.config.ts, deployed to Cloudflare Pages
+- **SEO** — use `toolMetadata()` + `toolJsonLd()` from `src/lib/tools/seo.ts` for all tool pages
