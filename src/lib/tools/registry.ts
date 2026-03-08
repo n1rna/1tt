@@ -169,6 +169,22 @@ export const tools: ToolDefinition[] = [
     icon: "Hash",
     keywords: ["hash", "md5", "sha256", "sha512", "sha1", "sha384", "checksum", "digest", "file hash", "integrity"],
   },
+  {
+    slug: "logo",
+    name: "Logo Generator",
+    description: "Create minimal text logos and export as SVG, PNG, or favicon in any size",
+    category: "generators",
+    icon: "Type",
+    keywords: ["logo", "text", "brand", "favicon", "icon", "svg", "png", "generate", "minimal", "typography"],
+  },
+  {
+    slug: "image",
+    name: "Image Tool",
+    description: "Convert and resize images in the browser — PNG, JPEG, WebP, AVIF with quality control and aspect-ratio locking",
+    category: "media",
+    icon: "Image",
+    keywords: ["image", "convert", "resize", "png", "jpeg", "jpg", "webp", "avif", "compress", "format", "canvas", "width", "height"],
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

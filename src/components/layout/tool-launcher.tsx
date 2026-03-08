@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
 import {
@@ -78,10 +78,17 @@ export function ToolLauncher() {
     if (open) refreshBookmarks();
   }, [open, refreshBookmarks]);
 
+  const listRef = useRef<HTMLDivElement>(null);
+
   const results = useMemo(
     () => searchItems(query, allItems),
     [query, allItems]
   );
+
+  // Scroll results to top when query changes
+  useEffect(() => {
+    listRef.current?.scrollTo(0, 0);
+  }, [query]);
 
   // When searching, show results grouped by category
   // When browsing (no query), show bookmarked items first in their own group
@@ -139,7 +146,7 @@ export function ToolLauncher() {
         value={query}
         onValueChange={setQuery}
       />
-      <CommandList className="max-h-80">
+      <CommandList ref={listRef} className="max-h-80">
         <CommandEmpty>
           <div className="flex flex-col items-center gap-1 py-4">
             <Icons.SearchX className="h-8 w-8 text-muted-foreground/30" />

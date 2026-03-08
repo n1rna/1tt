@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Search } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,15 @@ export function Header() {
   return (
     <header className="z-50 w-full border-b bg-background/80 backdrop-blur-sm shrink-0">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-6">
-        <Link href="/" className="font-bold text-lg shrink-0">
-          1two.dev
+        <Link href="/" className="flex items-center gap-2 font-bold text-lg shrink-0">
+          <Image
+            src="/logo.svg"
+            alt="1two.dev"
+            width={28}
+            height={28}
+            className="rounded-md"
+          />
+          <span>1two.dev</span>
         </Link>
 
         <button

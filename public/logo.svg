@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234 234" width="234" height="234">
+<defs>
+  <linearGradient id="bgGrad" x1="-22.1" y1="77.1" x2="256.1" y2="156.9" gradientUnits="userSpaceOnUse">
+    <stop offset="0%" stop-color="#721431"/>
+    <stop offset="100%" stop-color="#ff7ea5"/>
+  </linearGradient>
+</defs>
+  <rect width="234" height="234" rx="0" fill="url(#bgGrad)"/>
+  <text
+    x="50%"
+    y="50%"
+    dominant-baseline="central"
+    text-anchor="middle"
+    fill="#ffffff"
+    font-family="'Anton', sans-serif"
+    font-weight="900"
+    font-size="120"
+    letter-spacing="5"
+  >12.</text>
+</svg>
