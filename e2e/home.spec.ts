@@ -25,8 +25,8 @@ test.describe("Home page", () => {
     await page.goto("/");
     await page.keyboard.press("Control+p");
     await page.getByPlaceholder("Search tools...").fill("base64");
-    await expect(page.getByRole("option", { name: /Base64/ })).toBeVisible();
-    await page.getByRole("option", { name: /Base64/ }).click();
+    await expect(page.getByRole("option", { name: /Base64 Encoder/ })).toBeVisible();
+    await page.getByRole("option", { name: /Base64 Encoder/ }).click();
     await expect(page).toHaveURL("/tools/b64");
   });
 });

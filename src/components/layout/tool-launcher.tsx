@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
 import {
@@ -8,21 +8,28 @@ import {
   CommandInput,
   CommandList,
   CommandEmpty,
-  CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { tools, categoryLabels } from "@/lib/tools/registry";
-import { getToolsByCategory } from "@/lib/tools/registry";
-import { ToolCategory } from "@/lib/tools/types";
+import {
+  getSearchItems,
+  searchItems,
+  categoryLabels,
+} from "@/lib/tools/registry";
+import type { SearchItem } from "@/lib/tools/registry";
+import { Badge } from "@/components/ui/badge";
 
 function getIcon(name: string) {
-  const Icon = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[name];
+  const Icon = (
+    Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>
+  )[name];
   return Icon || Icons.Wrench;
 }
 
 export function ToolLauncher() {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const router = useRouter();
+  const allItems = useMemo(() => getSearchItems(), []);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -42,45 +49,66 @@ export function ToolLauncher() {
     };
   }, []);
 
-  const grouped = getToolsByCategory();
+  const results = useMemo(
+    () => searchItems(query, allItems),
+    [query, allItems]
+  );
 
-  function selectTool(slug: string) {
+  function select(item: SearchItem) {
     setOpen(false);
-    router.push(`/tools/${slug}`);
+    setQuery("");
+    router.push(item.href);
   }
 
   return (
     <CommandDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setQuery("");
+      }}
+      shouldFilter={false}
       title="Tool Launcher"
       description="Search for a tool..."
     >
-      <CommandInput placeholder="Search tools..." />
+      <CommandInput
+        placeholder="Search tools..."
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
         <CommandEmpty>No tools found.</CommandEmpty>
-        {(Object.entries(grouped) as [ToolCategory, typeof tools][]).map(
-          ([category, categoryTools]) => (
-            <CommandGroup key={category} heading={categoryLabels[category]}>
-              {categoryTools.map((tool) => {
-                const Icon = getIcon(tool.icon);
-                return (
-                  <CommandItem
-                    key={tool.slug}
-                    value={`${tool.name} ${tool.keywords.join(" ")}`}
-                    onSelect={() => selectTool(tool.slug)}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{tool.name}</span>
-                    <span className="ml-auto text-xs text-muted-foreground hidden sm:inline">
-                      {tool.description}
+        {results.map((item) => {
+          const Icon = getIcon(item.icon);
+          return (
+            <CommandItem
+              key={item.id}
+              value={item.id}
+              onSelect={() => select(item)}
+              keywords={[item.id]}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {item.parent ? (
+                  <>
+                    <span className="text-muted-foreground">
+                      {item.parent} /{" "}
                     </span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          )
-        )}
+                    {item.name}
+                  </>
+                ) : (
+                  item.name
+                )}
+              </span>
+              <Badge
+                variant="outline"
+                className="ml-auto shrink-0 text-[10px] px-1.5 py-0 h-4 font-normal"
+              >
+                {categoryLabels[item.category]}
+              </Badge>
+            </CommandItem>
+          );
+        })}
       </CommandList>
     </CommandDialog>
   );
