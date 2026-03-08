@@ -185,6 +185,14 @@ export const tools: ToolDefinition[] = [
     icon: "Image",
     keywords: ["image", "convert", "resize", "png", "jpeg", "jpg", "webp", "avif", "compress", "format", "canvas", "width", "height"],
   },
+  {
+    slug: "worldclock",
+    name: "World Clock",
+    description: "Live clocks for multiple timezones and a visual overlap finder to schedule meetings across time zones",
+    category: "conversion",
+    icon: "Globe",
+    keywords: ["world clock", "timezone", "time zone", "clock", "utc", "overlap", "meeting time", "schedule", "convert time", "international"],
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

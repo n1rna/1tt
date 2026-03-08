@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Search } from "lucide-react";
+import { Search, Github } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
 
@@ -35,6 +35,14 @@ export function Header() {
         </button>
 
         <div className="ml-auto flex items-center gap-2">
+          <a
+            href="https://github.com/n1rna/1two"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-colors text-muted-foreground"
+          >
+            <Github className="h-4 w-4" />
+          </a>
           <ThemeToggle />
           <Button variant="outline" size="sm" disabled>
             Sign in
