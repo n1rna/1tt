@@ -29,6 +29,11 @@ import {
 
 const HIGHLIGHT_CURRENCIES = ["EUR", "GBP", "JPY"];
 
+/** Format a number for use in a number input (no commas, plain decimal) */
+function toPlainNumber(n: number): string {
+  return parseFloat(n.toFixed(2)).toString();
+}
+
 export function CurrencyTool() {
   const [currencies, setCurrencies] = useState<CurrencyInfo[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
@@ -99,7 +104,7 @@ export function CurrencyTool() {
     if (convRate == null) return;
     const v = parseFloat(leftAmount);
     if (!isNaN(v)) {
-      setRightAmount(formatAmount(v * convRate));
+      setRightAmount(toPlainNumber(v * convRate));
     }
   }, [convRate]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,7 +113,7 @@ export function CurrencyTool() {
       setLeftAmount(val);
       const v = parseFloat(val);
       if (convRate != null && !isNaN(v)) {
-        setRightAmount(formatAmount(v * convRate));
+        setRightAmount(toPlainNumber(v * convRate));
       } else {
         setRightAmount("");
       }
@@ -121,7 +126,7 @@ export function CurrencyTool() {
       setRightAmount(val);
       const v = parseFloat(val);
       if (convRate != null && convRate !== 0 && !isNaN(v)) {
-        setLeftAmount(formatAmount(v / convRate));
+        setLeftAmount(toPlainNumber(v / convRate));
       } else {
         setLeftAmount("");
       }
