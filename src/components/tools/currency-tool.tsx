@@ -13,7 +13,6 @@ import {
   DollarSign,
   RefreshCw,
   ArrowRightLeft,
-  TrendingUp,
   AlertCircle,
   Search,
 } from "lucide-react";
@@ -28,10 +27,9 @@ import {
   type ExchangeRates,
 } from "@/lib/tools/currency";
 
-type Tab = "rates" | "convert";
+const HIGHLIGHT_CURRENCIES = ["EUR", "GBP", "JPY"];
 
 export function CurrencyTool() {
-  const [tab, setTab] = useState<Tab>("rates");
   const [currencies, setCurrencies] = useState<CurrencyInfo[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [rates, setRates] = useState<ExchangeRates | null>(null);
@@ -50,14 +48,12 @@ export function CurrencyTool() {
   } | null>(null);
   const [converting, setConverting] = useState(false);
 
-  // Load currencies on mount
   useEffect(() => {
     fetchCurrencies()
       .then(setCurrencies)
       .catch(() => setError("Failed to load currencies"));
   }, []);
 
-  // Fetch rates when base changes
   const loadRates = useCallback(async (base: string) => {
     setLoading(true);
     setError(null);
@@ -79,10 +75,13 @@ export function CurrencyTool() {
     const amount = parseFloat(fromAmount);
     if (isNaN(amount) || amount <= 0) return;
     if (fromCurrency === toCurrency) {
-      setConvertedResult({ rate: 1, result: amount, date: new Date().toISOString().split("T")[0] });
+      setConvertedResult({
+        rate: 1,
+        result: amount,
+        date: new Date().toISOString().split("T")[0],
+      });
       return;
     }
-
     setConverting(true);
     try {
       const res = await fetch(
@@ -99,22 +98,36 @@ export function CurrencyTool() {
     setConverting(false);
   }, [fromAmount, fromCurrency, toCurrency]);
 
-  // Auto-convert on changes
+  // Auto-convert on currency change
   useEffect(() => {
-    if (tab === "convert" && fromAmount && parseFloat(fromAmount) > 0) {
+    if (fromAmount && parseFloat(fromAmount) > 0) {
       handleConvert();
     }
-  }, [fromCurrency, toCurrency, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fromCurrency, toCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const swapCurrencies = useCallback(() => {
     setFromCurrency(toCurrency);
     setToCurrency(fromCurrency);
   }, [fromCurrency, toCurrency]);
 
-  // Sorted rates: popular first, then rest alphabetically
-  const sortedRates = useMemo(() => {
+  const currencyName = (code: string) =>
+    currencies.find((c) => c.code === code)?.name || code;
+
+  // Top 3 highlighted rates
+  const highlightedRates = useMemo(() => {
     if (!rates) return [];
-    const entries = Object.entries(rates.rates);
+    return HIGHLIGHT_CURRENCIES.filter((c) => c !== baseCurrency && rates.rates[c] != null).map(
+      (code) => ({ code, rate: rates.rates[code] })
+    );
+  }, [rates, baseCurrency]);
+
+  // Rest of the rates (excluding highlighted), sorted popular-first
+  const tableRates = useMemo(() => {
+    if (!rates) return [];
+    const highlightSet = new Set(HIGHLIGHT_CURRENCIES);
+    const entries = Object.entries(rates.rates).filter(
+      ([code]) => !highlightSet.has(code)
+    );
     const q = rateFilter.toLowerCase();
     const filtered = q
       ? entries.filter(([code]) => {
@@ -127,20 +140,17 @@ export function CurrencyTool() {
       : entries;
 
     return filtered.sort(([a], [b]) => {
-      const aPopular = POPULAR_CURRENCIES.indexOf(a);
-      const bPopular = POPULAR_CURRENCIES.indexOf(b);
-      if (aPopular !== -1 && bPopular !== -1) return aPopular - bPopular;
-      if (aPopular !== -1) return -1;
-      if (bPopular !== -1) return 1;
+      const aIdx = POPULAR_CURRENCIES.indexOf(a);
+      const bIdx = POPULAR_CURRENCIES.indexOf(b);
+      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+      if (aIdx !== -1) return -1;
+      if (bIdx !== -1) return 1;
       return a.localeCompare(b);
     });
-  }, [rates, currencies, rateFilter]);
-
-  const currencyName = (code: string) =>
-    currencies.find((c) => c.code === code)?.name || code;
+  }, [rates, currencies, rateFilter, baseCurrency]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] max-h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex flex-col h-full min-h-0">
       {/* Toolbar */}
       <div className="border-b shrink-0">
         <div className="max-w-6xl mx-auto flex items-center gap-2 px-6 py-2">
@@ -149,28 +159,39 @@ export function CurrencyTool() {
 
           {rates && (
             <span className="text-xs text-muted-foreground ml-2">
-              ECB rates · {rates.date}
+              ECB · {rates.date}
             </span>
           )}
 
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Base</span>
+              <Select
+                value={baseCurrency}
+                onValueChange={(v) => v && setBaseCurrency(v)}
+              >
+                <SelectTrigger size="sm" className="text-xs w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {currencies.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.code} — {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
-              variant={tab === "rates" ? "secondary" : "ghost"}
+              variant="ghost"
               size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() => setTab("rates")}
+              className="h-7 px-2"
+              onClick={() => loadRates(baseCurrency)}
+              disabled={loading}
             >
-              <TrendingUp className="h-3.5 w-3.5 mr-1" />
-              Rates
-            </Button>
-            <Button
-              variant={tab === "convert" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() => setTab("convert")}
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
-              Convert
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
         </div>
@@ -178,61 +199,144 @@ export function CurrencyTool() {
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-auto">
-        {error && (
-          <div className="max-w-2xl mx-auto mt-4 px-6">
+        <div className="max-w-2xl mx-auto p-6 space-y-6">
+          {error && (
             <div className="flex items-center gap-2 text-sm text-red-500 bg-red-500/10 rounded-lg p-3">
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
-          </div>
-        )}
+          )}
 
-        {tab === "rates" && (
-          <div className="max-w-2xl mx-auto p-6 space-y-4">
-            {/* Base currency selector + filter */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Base</span>
-                <Select
-                  value={baseCurrency}
-                  onValueChange={(v) => v && setBaseCurrency(v)}
+          {/* Highlighted currencies */}
+          {highlightedRates.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              {highlightedRates.map(({ code, rate }) => (
+                <div
+                  key={code}
+                  className="border rounded-lg p-4 bg-muted/20 text-center"
                 >
-                  <SelectTrigger size="sm" className="text-xs w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {currencies.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>
-                        {c.code} — {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {baseCurrency}/{code}
+                  </div>
+                  <div className="text-xl font-bold font-mono">
+                    {formatRate(rate)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/60 mt-1">
+                    {currencyName(code)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-                <input
-                  type="text"
-                  placeholder="Filter currencies..."
-                  value={rateFilter}
-                  onChange={(e) => setRateFilter(e.target.value)}
-                  className="w-full h-8 pl-8 pr-3 text-xs rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
+          {/* Converter — inline */}
+          <div className="border rounded-lg p-4 bg-muted/10 space-y-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+              Convert
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={fromAmount}
+                onChange={(e) => setFromAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleConvert();
+                }}
+                placeholder="1"
+                className="w-28 h-8 px-3 text-sm rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                min="0"
+                step="any"
+              />
+              <Select
+                value={fromCurrency}
+                onValueChange={(v) => v && setFromCurrency(v)}
+              >
+                <SelectTrigger size="sm" className="text-xs w-24 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {currencies.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.code} — {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <button
+                onClick={swapCurrencies}
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+              </button>
+
+              <Select
+                value={toCurrency}
+                onValueChange={(v) => v && setToCurrency(v)}
+              >
+                <SelectTrigger size="sm" className="text-xs w-24 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {currencies.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.code} — {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <span className="text-sm font-mono flex-1 text-right">
+                {converting ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground inline" />
+                ) : convertedResult ? (
+                  <>
+                    <span className="text-muted-foreground text-xs mr-1">
+                      {getCurrencySymbol(toCurrency)}
+                    </span>
+                    <span className="font-medium">
+                      {formatAmount(convertedResult.result)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </span>
 
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-8 px-2"
-                onClick={() => loadRates(baseCurrency)}
-                disabled={loading}
+                className="h-8 px-3 text-xs shrink-0"
+                onClick={handleConvert}
+                disabled={
+                  converting || !fromAmount || parseFloat(fromAmount) <= 0
+                }
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                Go
               </Button>
             </div>
+            {convertedResult && !converting && (
+              <div className="text-[11px] text-muted-foreground/60">
+                1 {fromCurrency} = {formatRate(convertedResult.rate)}{" "}
+                {toCurrency} · {convertedResult.date}
+              </div>
+            )}
+          </div>
 
-            {/* Rates table */}
+          {/* Filter + Rates table */}
+          <div className="space-y-3">
+            <div className="relative max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+              <input
+                type="text"
+                placeholder="Filter currencies..."
+                value={rateFilter}
+                onChange={(e) => setRateFilter(e.target.value)}
+                className="w-full h-8 pl-8 pr-3 text-xs rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+
             {loading && !rates ? (
               <div className="text-sm text-muted-foreground text-center py-12">
                 Loading rates...
@@ -254,7 +358,7 @@ export function CurrencyTool() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedRates.map(([code, rate]) => (
+                    {tableRates.map(([code, rate]) => (
                       <tr
                         key={code}
                         className="border-b last:border-0 hover:bg-muted/20 transition-colors"
@@ -273,7 +377,8 @@ export function CurrencyTool() {
                           {formatRate(rate)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-sm text-muted-foreground">
-                          {getCurrencySymbol(code)}{formatRate(rate)}
+                          {getCurrencySymbol(code)}
+                          {formatRate(rate)}
                         </td>
                       </tr>
                     ))}
@@ -281,136 +386,13 @@ export function CurrencyTool() {
                 </table>
               </div>
             )}
-
-            <p className="text-[10px] text-muted-foreground/50 text-center">
-              Rates from the European Central Bank via Frankfurter API. Updated
-              on business days around 16:00 CET.
-            </p>
           </div>
-        )}
 
-        {tab === "convert" && (
-          <div className="max-w-md mx-auto p-6 space-y-6">
-            {/* From */}
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">From</label>
-              <div className="flex gap-2">
-                <Select
-                  value={fromCurrency}
-                  onValueChange={(v) => v && setFromCurrency(v)}
-                >
-                  <SelectTrigger size="sm" className="text-xs w-32 shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {currencies.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>
-                        {c.code} — {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <input
-                  type="number"
-                  value={fromAmount}
-                  onChange={(e) => setFromAmount(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleConvert();
-                  }}
-                  placeholder="Amount"
-                  className="flex-1 h-8 px-3 text-sm rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                  min="0"
-                  step="any"
-                />
-              </div>
-            </div>
-
-            {/* Swap button */}
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 rounded-full"
-                onClick={swapCurrencies}
-              >
-                <ArrowRightLeft className="h-3.5 w-3.5 rotate-90" />
-              </Button>
-            </div>
-
-            {/* To */}
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">To</label>
-              <div className="flex gap-2">
-                <Select
-                  value={toCurrency}
-                  onValueChange={(v) => v && setToCurrency(v)}
-                >
-                  <SelectTrigger size="sm" className="text-xs w-32 shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {currencies.map((c) => (
-                      <SelectItem key={c.code} value={c.code}>
-                        {c.code} — {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex-1 h-8 px-3 text-sm rounded-md border bg-muted/30 flex items-center font-mono">
-                  {converting ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                  ) : convertedResult ? (
-                    <span>{formatAmount(convertedResult.result)}</span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Convert button */}
-            <Button
-              className="w-full"
-              onClick={handleConvert}
-              disabled={converting || !fromAmount || parseFloat(fromAmount) <= 0}
-            >
-              {converting ? (
-                <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <ArrowRightLeft className="h-4 w-4 mr-2" />
-              )}
-              Convert
-            </Button>
-
-            {/* Result details */}
-            {convertedResult && !converting && (
-              <div className="border rounded-lg p-4 bg-muted/20 space-y-2">
-                <div className="text-center">
-                  <div className="text-2xl font-bold font-mono">
-                    {getCurrencySymbol(toCurrency)}
-                    {formatAmount(convertedResult.result)}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {fromAmount} {fromCurrency} = {formatAmount(convertedResult.result)}{" "}
-                    {toCurrency}
-                  </div>
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground pt-2 border-t">
-                  <span>
-                    1 {fromCurrency} = {formatRate(convertedResult.rate)}{" "}
-                    {toCurrency}
-                  </span>
-                  <span>{convertedResult.date}</span>
-                </div>
-              </div>
-            )}
-
-            <p className="text-[10px] text-muted-foreground/50 text-center">
-              Rates from the European Central Bank via Frankfurter API. Updated
-              on business days around 16:00 CET.
-            </p>
-          </div>
-        )}
+          <p className="text-[10px] text-muted-foreground/50 text-center pb-2">
+            Rates from the European Central Bank via Frankfurter API. Updated on
+            business days around 16:00 CET.
+          </p>
+        </div>
       </div>
     </div>
   );
