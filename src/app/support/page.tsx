@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { Heart } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Donate",
+  title: "Support",
   description: "Support 1two.dev — free, open-source developer tools.",
 };
 
-export default function DonatePage() {
+export default function SupportPage() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-12">
       <div className="flex items-center gap-2 mb-6">

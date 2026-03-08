@@ -16,8 +16,8 @@ export function Footer() {
           <Link href="/privacy" className="hover:text-foreground transition-colors">
             Privacy Policy
           </Link>
-          <Link href="/donate" className="hover:text-foreground transition-colors">
-            Donate
+          <Link href="/support" className="hover:text-foreground transition-colors">
+            Support
           </Link>
         </nav>
       </div>
