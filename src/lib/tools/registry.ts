@@ -122,6 +122,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["notification", "push", "firebase", "fcm", "vapid", "web push", "service worker", "subscribe", "test"],
   },
   {
+    slug: "currency",
+    name: "Currency Tool",
+    description: "View live exchange rates for 30+ currencies and convert between them with ECB data",
+    category: "data",
+    icon: "DollarSign",
+    keywords: ["currency", "exchange rate", "forex", "convert", "usd", "eur", "gbp", "jpy", "money", "finance"],
+  },
+  {
     slug: "workers",
     name: "Worker Inspector",
     description: "Inspect service workers, view registration state, scope, and script. Browse and manage Cache Storage.",
