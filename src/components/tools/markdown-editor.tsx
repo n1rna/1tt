@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo, Fragment } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Copy,
@@ -25,16 +25,34 @@ import {
   Table,
   Minus,
   Globe,
+  FolderOpen,
+  ExternalLink,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { EditorScrollbar } from "./editor-scrollbar";
 import { useSession } from "@/lib/auth-client";
 import { PublishDialog } from "@/components/layout/publish-dialog";
 
+interface PublishedPaste {
+  id: string;
+  title: string;
+  format: string;
+  visibility: string;
+  size: number;
+  createdAt: string;
+  url: string;
+}
+
 export function MarkdownEditor() {
   const [markdown, setMarkdown] = useState("");
   const [copied, setCopied] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [publishedPastes, setPublishedPastes] = useState<PublishedPaste[]>([]);
+  const [loadingPastes, setLoadingPastes] = useState(false);
   const { data: session } = useSession();
+  const pagesRef = useRef<HTMLDivElement>(null);
   const [widths, setWidths] = useState([50, 50]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -176,6 +194,55 @@ export function MarkdownEditor() {
   // Render markdown to HTML
   const renderedHtml = useMemo(() => renderMarkdown(markdown), [markdown]);
 
+  // Fetch published markdown pastes
+  const fetchPublishedPastes = useCallback(async () => {
+    if (!session) return;
+    setLoadingPastes(true);
+    try {
+      const res = await fetch("/api/proxy/pastes", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        const all: PublishedPaste[] = data.pastes ?? data ?? [];
+        setPublishedPastes(all.filter((p) => p.format === "markdown"));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingPastes(false);
+    }
+  }, [session]);
+
+  // Fetch on first open
+  const handleTogglePages = useCallback(() => {
+    const next = !pagesOpen;
+    setPagesOpen(next);
+    if (next) fetchPublishedPastes();
+  }, [pagesOpen, fetchPublishedPastes]);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    if (!pagesOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (pagesRef.current && !pagesRef.current.contains(e.target as Node)) {
+        setPagesOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [pagesOpen]);
+
+  // Refetch after publish dialog closes with a new paste
+  const handlePublishChange = useCallback(
+    (open: boolean) => {
+      setPublishOpen(open);
+      if (!open && session) {
+        // Small delay to let the API propagate
+        setTimeout(() => fetchPublishedPastes(), 500);
+      }
+    },
+    [session, fetchPublishedPastes]
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
@@ -222,12 +289,77 @@ export function MarkdownEditor() {
             {lineCount.toLocaleString()} lines
           </span>
         )}
+        {session && (
+          <div className="relative ml-2" ref={pagesRef}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleTogglePages}
+              className="h-7 px-2 text-xs gap-1.5"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              My Pages
+            </Button>
+            {pagesOpen && (
+              <div className="absolute right-0 top-full mt-1 w-72 z-50 rounded-lg border bg-popover shadow-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+                  <span className="text-xs font-medium text-muted-foreground">Published Markdown Pages</span>
+                </div>
+                {loadingPastes ? (
+                  <div className="flex items-center justify-center py-6 text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  </div>
+                ) : publishedPastes.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                    No published markdown pages yet.
+                  </div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    {publishedPastes.map((paste) => (
+                      <div
+                        key={paste.id}
+                        className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/50 transition-colors border-b border-border/50 last:border-0"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">
+                            {paste.title || <span className="italic text-muted-foreground">Untitled</span>}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {new Date(paste.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <a
+                          href={`/p/${paste.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                          title="View page"
+                          onClick={() => setPagesOpen(false)}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        <a
+                          href={`/p/${paste.id}?edit=1`}
+                          className="shrink-0 p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit page"
+                          onClick={() => setPagesOpen(false)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {session && markdown && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setPublishOpen(true)}
-            className="h-7 px-2 text-xs gap-1.5 ml-2"
+            className="h-7 px-2 text-xs gap-1.5"
           >
             <Globe className="h-3.5 w-3.5" />
             Publish
@@ -366,7 +498,7 @@ export function MarkdownEditor() {
       </div>
       <PublishDialog
         open={publishOpen}
-        onOpenChange={setPublishOpen}
+        onOpenChange={handlePublishChange}
         content={markdown}
         format="markdown"
         defaultTitle=""

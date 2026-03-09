@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useCallback } from "react";
 import { Copy, Check, ExternalLink, Loader2, Globe, Lock, ArrowLeft, Pencil, Save, X } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 
 type PasteFormat = "text" | "markdown" | "json" | "code";
@@ -42,6 +43,8 @@ export default function PasteViewerPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const wantsEdit = searchParams.get("edit") === "1";
   const { data: session } = useSession();
   const [paste, setPaste] = useState<Paste | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +80,15 @@ export default function PasteViewerPage({
     }
     fetchPaste();
   }, [id]);
+
+  // Auto-enter edit mode when ?edit=1 and user is the owner
+  useEffect(() => {
+    if (wantsEdit && paste && session?.user?.id && session.user.id === paste.userId) {
+      setEditContent(paste.content);
+      setEditTitle(paste.title || "");
+      setEditing(true);
+    }
+  }, [wantsEdit, paste, session]);
 
   const copyContent = async () => {
     if (!paste) return;
