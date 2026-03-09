@@ -1,4 +1,5 @@
 import { Container, getContainer } from "@cloudflare/containers";
+import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   API_CONTAINER: DurableObjectNamespace<ApiContainer>;
@@ -12,11 +13,12 @@ export class ApiContainer extends Container<Env> {
   sleepAfter = "5m";
   enableInternet = true;
 
-  override get envVars() {
-    return {
-      DATABASE_URL: this.env.DATABASE_URL ?? "",
-      ALLOWED_ORIGINS: this.env.ALLOWED_ORIGINS ?? "",
-      TURNSTILE_SECRET_KEY: this.env.TURNSTILE_SECRET_KEY ?? "",
+  constructor(ctx: DurableObject["ctx"], env: Env) {
+    super(ctx, env);
+    this.envVars = {
+      DATABASE_URL: env.DATABASE_URL ?? "",
+      ALLOWED_ORIGINS: env.ALLOWED_ORIGINS ?? "",
+      TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY ?? "",
       PORT: "8080",
     };
   }
