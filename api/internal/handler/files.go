@@ -96,7 +96,7 @@ func UploadFile(cfg *config.Config, db *sql.DB, r2 *storage.R2Client) http.Handl
 			MimeType:       contentType,
 			CreatedAt:      createdAt.UTC().Format(time.RFC3339),
 			LastAccessedAt: lastAccessedAt.UTC().Format(time.RFC3339),
-			URL:            fmt.Sprintf("/api/v1/files/%s", fileID),
+			URL:            fmt.Sprintf("/api/proxy/files/%s", fileID),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -136,7 +136,7 @@ func ListFiles(db *sql.DB) http.HandlerFunc {
 			}
 			f.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 			f.LastAccessedAt = lastAccessedAt.UTC().Format(time.RFC3339)
-			f.URL = fmt.Sprintf("/api/v1/files/%s", f.ID)
+			f.URL = fmt.Sprintf("/api/proxy/files/%s", f.ID)
 			files = append(files, f)
 		}
 		if err := rows.Err(); err != nil {
