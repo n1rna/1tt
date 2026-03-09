@@ -1,6 +1,5 @@
-import { ToolLayout } from "@/components/layout/tool-layout";
-import { WorldClockTool } from "@/components/tools/worldclock-tool";
 import { toolMetadata, toolJsonLd } from "@/lib/tools/seo";
+import { WorldClockPage as WorldClockClient } from "@/components/tools/worldclock-tool";
 
 export const metadata = toolMetadata({
   slug: "worldclock",
@@ -21,15 +20,5 @@ export const metadata = toolMetadata({
 
 export default function WorldClockPage() {
   const jsonLd = toolJsonLd("worldclock");
-  return (
-    <ToolLayout slug="worldclock">
-      {jsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      )}
-      <WorldClockTool />
-    </ToolLayout>
-  );
+  return <WorldClockClient jsonLd={jsonLd} />;
 }

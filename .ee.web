@@ -1,0 +1,75 @@
+{
+	"project": "1two-web",
+	"schema": {
+		"variables": {
+			"DATABASE_URL": {
+				"name": "DATABASE_URL",
+				"title": "PostgreSQL connection string",
+				"type": "string",
+				"required": true,
+				"secret": true
+			},
+			"BETTER_AUTH_SECRET": {
+				"name": "BETTER_AUTH_SECRET",
+				"title": "Better Auth signing secret",
+				"type": "string",
+				"required": true,
+				"secret": true
+			},
+			"BETTER_AUTH_URL": {
+				"name": "BETTER_AUTH_URL",
+				"title": "Better Auth base URL",
+				"type": "string",
+				"default": "http://localhost:3000",
+				"required": true
+			},
+			"GITHUB_CLIENT_ID": {
+				"name": "GITHUB_CLIENT_ID",
+				"title": "GitHub OAuth client ID",
+				"type": "string",
+				"required": true
+			},
+			"GITHUB_CLIENT_SECRET": {
+				"name": "GITHUB_CLIENT_SECRET",
+				"title": "GitHub OAuth client secret",
+				"type": "string",
+				"required": true,
+				"secret": true
+			},
+			"GOOGLE_CLIENT_ID": {
+				"name": "GOOGLE_CLIENT_ID",
+				"title": "Google OAuth client ID",
+				"type": "string",
+				"required": false
+			},
+			"GOOGLE_CLIENT_SECRET": {
+				"name": "GOOGLE_CLIENT_SECRET",
+				"title": "Google OAuth client secret",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"API_BACKEND_URL": {
+				"name": "API_BACKEND_URL",
+				"title": "Go backend internal URL",
+				"type": "string",
+				"default": "http://localhost:8090",
+				"required": true
+			},
+			"NEXT_PUBLIC_TURNSTILE_SITE_KEY": {
+				"name": "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
+				"title": "Cloudflare Turnstile site key",
+				"type": "string",
+				"required": true
+			}
+		}
+	},
+	"environments": {
+		"development": {
+			"sheets": [".env.web.development"]
+		},
+		"production": {
+			"sheets": [".env.web.production"]
+		}
+	}
+}

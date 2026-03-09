@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "1two-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-09",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // KV namespace for Next.js cache
+  "kv_namespaces": [
+    {
+      "binding": "NEXT_CACHE_WORKERS_KV",
+      "id": "be5941944a474baa9efc3f80305ed6b5"
+    }
+  ],
+
+  // Assets (static files)
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  // Service binding to Go API backend
+  "services": [
+    {
+      "binding": "API_BACKEND",
+      "service": "onetwo-api"
+    }
+  ],
+
+  // Environment variables (set via wrangler secret or dashboard)
+  // DATABASE_URL, BETTER_AUTH_SECRET, etc.
+
+  "observability": {
+    "enabled": true
+  }
+}

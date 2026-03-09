@@ -193,6 +193,31 @@ export const tools: ToolDefinition[] = [
     icon: "Globe",
     keywords: ["world clock", "timezone", "time zone", "clock", "utc", "overlap", "meeting time", "schedule", "convert time", "international"],
   },
+  {
+    slug: "ip",
+    name: "IP Address",
+    description: "View your public IP address, geolocation, and network info. Also available via curl.",
+    category: "web",
+    icon: "Globe",
+    keywords: ["ip", "ip address", "my ip", "geolocation", "location", "network", "curl", "whois"],
+  },
+  {
+    slug: "dns",
+    name: "DNS Lookup",
+    description: "Look up DNS records for any domain — A, AAAA, MX, CNAME, TXT, NS, and more",
+    category: "web",
+    icon: "Search",
+    keywords: ["dns", "lookup", "domain", "nameserver", "mx", "cname", "txt", "a record", "aaaa", "ns", "soa", "dig", "nslookup"],
+  },
+  {
+    slug: "upload",
+    name: "File Upload",
+    description: "Upload, manage, and share files securely with your account",
+    category: "web",
+    icon: "Upload",
+    keywords: ["upload", "file", "share", "storage", "cloud", "send"],
+    requiresAuth: true,
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

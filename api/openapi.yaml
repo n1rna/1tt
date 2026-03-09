@@ -1,0 +1,264 @@
+openapi: 3.1.0
+info:
+  title: 1two API
+  version: 0.1.0
+  description: Backend API for 1two.dev developer tools
+
+servers:
+  - url: /api/proxy
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /dns/lookup:
+    post:
+      operationId: dnsLookup
+      summary: DNS record lookup
+      tags: [dns]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DNSLookupRequest"
+      responses:
+        "200":
+          description: DNS lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DNSLookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Turnstile token invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: DNS resolution failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /files:
+    post:
+      operationId: uploadFile
+      summary: Upload a file
+      tags: [files]
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    get:
+      operationId: listFiles
+      summary: List uploaded files
+      tags: [files]
+      security:
+        - sessionAuth: []
+      responses:
+        "200":
+          description: List of files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /files/{id}:
+    get:
+      operationId: getFile
+      summary: Download a file
+      tags: [files]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteFile
+      summary: Delete a file
+      tags: [files]
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: better-auth.session_token
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    FileInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        mimeType:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+
+    DNSLookupRequest:
+      type: object
+      required: [domain, type, turnstileToken]
+      properties:
+        domain:
+          type: string
+          example: example.com
+        type:
+          type: string
+          enum: [A, AAAA, CNAME, MX, TXT, NS, SOA, SRV, CAA, PTR]
+          example: A
+        turnstileToken:
+          type: string
+          description: Cloudflare Turnstile challenge token
+
+    DNSLookupResponse:
+      type: object
+      properties:
+        domain:
+          type: string
+        type:
+          type: string
+        records:
+          description: >
+            Array of results whose shape depends on the record type.
+            A/AAAA/CNAME/NS/TXT/PTR return strings.
+            MX returns {host, priority} objects.
+            SOA returns {ns, mbox, serial, refresh, retry, expire, minttl} objects.
+            SRV returns {target, port, priority, weight} objects.
+            CAA returns {flag, tag, value} objects.
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: array
+              items:
+                type: object
+        ttl:
+          type: integer
+          format: int64
+          description: Minimum TTL observed across returned records (seconds)
+        resolvedAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

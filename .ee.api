@@ -1,0 +1,50 @@
+{
+	"project": "1two-api",
+	"schema": {
+		"variables": {
+			"DATABASE_URL": {
+				"name": "DATABASE_URL",
+				"title": "PostgreSQL connection string",
+				"type": "string",
+				"required": true,
+				"secret": true
+			},
+			"PORT": {
+				"name": "PORT",
+				"title": "API server port",
+				"type": "number",
+				"default": "8090",
+				"required": true
+			},
+			"ALLOWED_ORIGINS": {
+				"name": "ALLOWED_ORIGINS",
+				"title": "CORS allowed origins (comma-separated)",
+				"type": "string",
+				"default": "http://localhost:3000",
+				"required": true
+			},
+			"UPLOAD_DIR": {
+				"name": "UPLOAD_DIR",
+				"title": "File upload directory",
+				"type": "string",
+				"default": "./uploads",
+				"required": true
+			},
+			"TURNSTILE_SECRET_KEY": {
+				"name": "TURNSTILE_SECRET_KEY",
+				"title": "Cloudflare Turnstile secret key",
+				"type": "string",
+				"required": true,
+				"secret": true
+			}
+		}
+	},
+	"environments": {
+		"development": {
+			"sheets": [".env.api.development"]
+		},
+		"production": {
+			"sheets": [".env.api.production"]
+		}
+	}
+}

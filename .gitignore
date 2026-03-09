@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -22,6 +23,9 @@
 /.next/
 /out/
 
+# cloudflare
+/.open-next/
+
 # production
 /build
 
@@ -38,9 +42,17 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# ee configs (schemas + environments) should be tracked
+!.ee.*
+
+# uploaded files
+/uploads
+/api/uploads
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+api/server

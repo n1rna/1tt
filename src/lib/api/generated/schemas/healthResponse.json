@@ -1,0 +1,1 @@
+{"type":"object","properties":{"status":{"type":"string"},"service":{"type":"string"}},"x-readme-ref-name":"HealthResponse"}

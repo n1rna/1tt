@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { QueryProvider } from "@/components/layout/query-provider";
 import { ToolLauncher } from "@/components/layout/tool-launcher";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -102,16 +103,18 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider>
-            <ToolLauncher />
-            <div className="flex flex-col h-screen">
-              <Header />
-              <main className="flex-1 min-h-0 overflow-auto">
-                {children}
-              </main>
-              <Footer />
-            </div>
-          </TooltipProvider>
+          <QueryProvider>
+            <TooltipProvider>
+              <ToolLauncher />
+              <div className="flex flex-col h-screen">
+                <Header />
+                <main className="flex-1 min-h-0 overflow-y-scroll">
+                  {children}
+                </main>
+                <Footer />
+              </div>
+            </TooltipProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Plus, Search, Clock, MapPin } from "lucide-react";
+import { X, Plus, Search, Clock, MapPin, CalendarDays, Eye } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────
 
@@ -9,6 +9,8 @@ interface ClockEntry {
   tz: string;
   label: string;
 }
+
+type CalendarType = "gregorian" | "shamsi" | "qamari";
 
 // ── Helpers ──────────────────────────────────────────
 
@@ -85,6 +87,36 @@ function localHourInTz(utcHour: number, offsetMinutes: number): number {
   return ((utcHour * 60 + offsetMinutes) / 60 + 24) % 24;
 }
 
+// ── Calendar config ───────────────────────────────────
+
+const CALENDAR_CONFIG: Record<CalendarType, { name: string; calendar: string; locale: string; dir: "ltr" | "rtl" }> = {
+  gregorian: { name: "Gregorian",       calendar: "gregory",      locale: "en-US", dir: "ltr" },
+  shamsi:    { name: "Shamsi (شمسی)",   calendar: "persian",      locale: "fa-IR", dir: "rtl" },
+  qamari:    { name: "Qamari (قمری)",   calendar: "islamic-civil", locale: "ar-SA", dir: "rtl" },
+};
+
+const CALENDAR_ACCENT: Record<CalendarType, string> = {
+  gregorian: "bg-sky-500",
+  shamsi:    "bg-emerald-500",
+  qamari:    "bg-amber-500",
+};
+
+function formatCalendarDate(date: Date, config: { calendar: string; locale: string }): string {
+  try {
+    return new Intl.DateTimeFormat(
+      `${config.locale}-u-ca-${config.calendar}`,
+      {
+        weekday: "long",
+        year:    "numeric",
+        month:   "long",
+        day:     "numeric",
+      }
+    ).format(date);
+  } catch {
+    return date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  }
+}
+
 // ── Subcomponents ─────────────────────────────────────
 
 function formatRelative(diffMinutes: number): string {
@@ -142,6 +174,40 @@ function ClockCard({ entry, onRemove, now, isLocal, relativeText }: {
   );
 }
 
+// Country / region aliases so users can search "US", "USA", "UK", "Iran", etc.
+const US_CITIES = new Set([
+  "New_York", "Chicago", "Denver", "Los_Angeles", "Anchorage", "Adak",
+  "Phoenix", "Boise", "Indiana", "Kentucky", "North_Dakota", "Juneau",
+  "Sitka", "Yakutat", "Nome", "Metlakatla", "Detroit", "Menominee",
+]);
+function tzAliases(tz: string): string {
+  const aliases: string[] = [];
+  const parts = tz.split("/");
+  const region = parts[0];
+  const city = parts[1] ?? "";
+  if (region === "America" && US_CITIES.has(city)) aliases.push("us", "usa", "united states");
+  if (region === "America") aliases.push("america");
+  if (region === "US") aliases.push("us", "usa", "united states");
+  if (tz === "Europe/London") aliases.push("uk", "united kingdom", "britain", "england");
+  if (tz === "Pacific/Honolulu") aliases.push("us", "usa", "united states", "hawaii");
+  if (region === "Europe") aliases.push("europe");
+  if (tz === "Asia/Tehran") aliases.push("iran", "persia");
+  if (tz === "Asia/Tokyo") aliases.push("japan");
+  if (tz === "Asia/Shanghai" || tz === "Asia/Hong_Kong") aliases.push("china");
+  if (tz === "Asia/Kolkata") aliases.push("india");
+  if (tz === "Asia/Dubai") aliases.push("uae", "emirates");
+  if (region === "Asia") aliases.push("asia");
+  if (region === "Africa") aliases.push("africa");
+  if (region === "Australia") aliases.push("australia", "oceania");
+  if (region === "Pacific") aliases.push("oceania", "pacific");
+  if (region === "Canada") aliases.push("canada");
+  if (region === "Indian") aliases.push("indian ocean");
+  return aliases.join(" ");
+}
+const TZ_ALIASES: Record<string, string> = Object.fromEntries(
+  ALL_TIMEZONES.map((tz) => [tz, tzAliases(tz)])
+);
+
 function TzSearchDropdown({
   onSelect,
   placeholder,
@@ -156,10 +222,13 @@ function TzSearchDropdown({
   const inputRef              = useRef<HTMLInputElement>(null);
   const containerRef          = useRef<HTMLDivElement>(null);
 
+  const q = query.toLowerCase();
   const filtered = ALL_TIMEZONES.filter(
     (tz) =>
       (!exclude || !exclude.has(tz)) &&
-      tz.toLowerCase().includes(query.toLowerCase())
+      (tz.toLowerCase().includes(q) ||
+       tzLabel(tz).toLowerCase().includes(q) ||
+       (TZ_ALIASES[tz] ?? "").includes(q))
   ).slice(0, 30);
 
   useEffect(() => {
@@ -215,6 +284,45 @@ function TzSearchDropdown({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Calendar Card ─────────────────────────────────────
+
+function CalendarCard({ type, onRemove, now }: {
+  type: CalendarType;
+  onRemove: (() => void) | null;
+  now: Date;
+}) {
+  const config  = CALENDAR_CONFIG[type];
+  const accent  = CALENDAR_ACCENT[type];
+  const dateStr = formatCalendarDate(now, config);
+
+  return (
+    <div className="group relative flex flex-col gap-2 rounded-xl border px-5 py-4 bg-card">
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          aria-label={`Remove ${config.name} calendar`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 rounded-full shrink-0 ${accent}`} />
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{config.name}</span>
+      </div>
+
+      <p
+        className="text-lg font-medium leading-snug"
+        dir={config.dir}
+        lang={config.locale}
+      >
+        {dateStr}
+      </p>
     </div>
   );
 }
@@ -404,13 +512,14 @@ function getLocalTz(): string {
   }
 }
 
-export function WorldClockTool() {
-  const [now,           setNow]          = useState(() => new Date());
-  const [favorites,     setFavorites]    = useState<ClockEntry[]>([]);
-  const [overlapTzs,    setOverlapTzs]   = useState<ClockEntry[]>([]);
-  const [showRelative,  setShowRelative] = useState(false);
-  const [localTz,       setLocalTz]      = useState("UTC");
-  const [hydrated,      setHydrated]     = useState(false);
+export function WorldClockTool({ focusMode = false }: { focusMode?: boolean }) {
+  const [now,             setNow]            = useState(() => new Date());
+  const [favorites,       setFavorites]      = useState<ClockEntry[]>([]);
+  const [overlapTzs,      setOverlapTzs]     = useState<ClockEntry[]>([]);
+  const [enabledCalendars, setEnabledCalendars] = useState<CalendarType[]>([]);
+  const [showRelative,    setShowRelative]   = useState(false);
+  const [localTz,         setLocalTz]        = useState("UTC");
+  const [hydrated,        setHydrated]       = useState(false);
 
   // Hydrate from localStorage after mount
   useEffect(() => {
@@ -427,6 +536,12 @@ export function WorldClockTool() {
       setOverlapTzs(ol ? JSON.parse(ol) : DEFAULT_OVERLAP);
     } catch {
       setOverlapTzs(DEFAULT_OVERLAP);
+    }
+    try {
+      const cals = localStorage.getItem("worldclock-calendars");
+      setEnabledCalendars(cals ? JSON.parse(cals) : ["gregorian"]);
+    } catch {
+      setEnabledCalendars(["gregorian"]);
     }
     try {
       const rel = localStorage.getItem("worldclock-show-relative");
@@ -453,6 +568,12 @@ export function WorldClockTool() {
     localStorage.setItem("worldclock-show-relative", JSON.stringify(showRelative));
   }, [showRelative, hydrated]);
 
+  // Persist calendar selection
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem("worldclock-calendars", JSON.stringify(enabledCalendars));
+  }, [enabledCalendars, hydrated]);
+
   // Tick every second
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -475,6 +596,12 @@ export function WorldClockTool() {
     setOverlapTzs((prev) => prev.filter((e) => e.tz !== tz));
   }, []);
 
+  const toggleCalendar = useCallback((type: CalendarType) => {
+    setEnabledCalendars((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }, []);
+
   // Local tz always first, then favorites (excluding local tz duplicate)
   const localEntry: ClockEntry = { tz: localTz, label: tzLabel(localTz) };
   const localOffsetMin = getUtcOffsetMinutes(localTz, now);
@@ -492,11 +619,13 @@ export function WorldClockTool() {
     );
   }
 
+  const hide = focusMode ? "hidden" : "";
+
   return (
     <div className="space-y-10">
       {/* ── Section A: Favorite Clocks ── */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className={`flex items-center justify-between gap-3 ${hide}`}>
           <div>
             <h2 className="text-sm font-semibold">Favorite Timezones</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Live clocks updating every second</p>
@@ -532,22 +661,72 @@ export function WorldClockTool() {
               <ClockCard
                 key={entry.tz}
                 entry={entry}
-                onRemove={isLocal ? null : () => removeFavorite(entry.tz)}
+                onRemove={focusMode || isLocal ? null : () => removeFavorite(entry.tz)}
                 now={now}
                 isLocal={isLocal}
-                relativeText={relativeText}
+                relativeText={focusMode ? undefined : relativeText}
               />
             );
           })}
         </div>
       </section>
 
-      {/* Divider */}
-      <div className="border-t" />
+      {/* ── Section B: Calendar Dates ── */}
+      <div className={`border-t ${hide}`} />
 
-      {/* ── Section B: Overlap Finder ── */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
+      <section className={`space-y-4 ${enabledCalendars.length === 0 && focusMode ? "hidden" : ""}`}>
+        <div className={`flex items-center justify-between gap-3 flex-wrap ${hide}`}>
+          <div>
+            <h2 className="text-sm font-semibold">Calendar Dates</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Current date in different calendar systems
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {(Object.keys(CALENDAR_CONFIG) as CalendarType[]).map((type) => {
+              const active = enabledCalendars.includes(type);
+              return (
+                <button
+                  key={type}
+                  onClick={() => toggleCalendar(type)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded-md border transition-colors ${
+                    active
+                      ? "bg-foreground text-background border-foreground"
+                      : "text-muted-foreground hover:text-foreground border-input"
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${CALENDAR_ACCENT[type]}`} />
+                  {CALENDAR_CONFIG[type].name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {enabledCalendars.length === 0 ? (
+          <div className={`rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2 ${hide}`}>
+            <CalendarDays className="h-5 w-5 opacity-40" />
+            Toggle a calendar above to see today&apos;s date.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {enabledCalendars.map((type) => (
+              <CalendarCard
+                key={type}
+                type={type}
+                onRemove={focusMode ? null : () => toggleCalendar(type)}
+                now={now}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Section C: Overlap Finder ── */}
+      <div className={`border-t ${hide}`} />
+
+      <section className={`space-y-4 ${hide}`}>
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h2 className="text-sm font-semibold">Timezone Overlap Finder</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -576,5 +755,40 @@ export function WorldClockTool() {
         )}
       </section>
     </div>
+  );
+}
+
+// ── Page wrapper (client) ────────────────────────────
+
+import { ToolLayout } from "@/components/layout/tool-layout";
+
+export function WorldClockPage({ jsonLd }: { jsonLd: Record<string, unknown> | null }) {
+  const [focusMode, setFocusMode] = useState(false);
+
+  return (
+    <ToolLayout
+      slug="worldclock"
+      toolbar={
+        <button
+          onClick={() => setFocusMode((v) => !v)}
+          className={`flex items-center justify-center gap-1.5 w-[70px] py-1 text-[10px] font-medium rounded-md border transition-colors ${
+            focusMode
+              ? "bg-foreground text-background border-foreground"
+              : "text-muted-foreground hover:text-foreground border-input"
+          }`}
+        >
+          <Eye className="h-3 w-3" />
+          Focus
+        </button>
+      }
+    >
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      <WorldClockTool focusMode={focusMode} />
+    </ToolLayout>
   );
 }

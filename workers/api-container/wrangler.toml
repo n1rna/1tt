@@ -1,0 +1,17 @@
+name = "onetwo-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-09"
+compatibility_flags = ["nodejs_compat"]
+
+[[containers]]
+class_name = "ApiContainer"
+image = "./../../api/Dockerfile"
+max_instances = 1
+
+[[durable_objects.bindings]]
+class_name = "ApiContainer"
+name = "API_CONTAINER"
+
+[[migrations]]
+new_sqlite_classes = ["ApiContainer"]
+tag = "v1"

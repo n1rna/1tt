@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Search, Github } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
-import { Button } from "@/components/ui/button";
+import { UserMenu } from "./user-menu";
 
 export function Header() {
   return (
@@ -44,9 +44,7 @@ export function Header() {
             <Github className="h-4 w-4" />
           </a>
           <ThemeToggle />
-          <Button variant="outline" size="sm" disabled>
-            Sign in
-          </Button>
+          <UserMenu />
         </div>
       </div>
     </header>

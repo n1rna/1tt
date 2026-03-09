@@ -5,6 +5,7 @@ export interface ToolDefinition {
   category: ToolCategory;
   icon: string; // Lucide icon name
   keywords: string[];
+  requiresAuth?: boolean;
 }
 
 export type ToolCategory =
