@@ -267,8 +267,8 @@ export function IpTool() {
           Use from Terminal
         </h2>
         <div className="rounded-xl border bg-card p-4 space-y-2">
-          <CodeBlock label="Get your IPv4 address" command="curl 1two.dev/ip" />
-          <CodeBlock label="Get your IPv6 address" command="curl 1two.dev/ip6" />
+          <CodeBlock label="Get your IPv4 address" command="curl -4 1two.dev/ip" />
+          <CodeBlock label="Get your IPv6 address" command="curl -6 1two.dev/ip" />
           <CodeBlock label="Get detailed IP info" command="curl 1two.dev/ip/info" />
         </div>
       </section>
