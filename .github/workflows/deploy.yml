@@ -7,8 +7,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      api: ${{ steps.filter.outputs.api }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'src/**'
+              - 'public/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'next.config.ts'
+              - 'open-next.config.ts'
+              - 'wrangler.jsonc'
+              - 'tsconfig.json'
+            api:
+              - 'api/**'
+              - 'workers/api-container/**'
+
   deploy-web:
     name: Deploy Web (Cloudflare Workers)
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +71,8 @@ jobs:
 
   deploy-api:
     name: Deploy API (Cloudflare Container)
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
