@@ -25,12 +25,13 @@ export default function JwtParserPage() {
   const jsonLd = toolJsonLd("jwt");
   return (
     <ToolLayout slug="jwt">
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <JwtParser />
     </ToolLayout>
   );

@@ -24,12 +24,13 @@ export default function Base64CodecPage() {
   const jsonLd = toolJsonLd("b64");
   return (
     <ToolLayout slug="b64">
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <Base64Codec />
     </ToolLayout>
   );

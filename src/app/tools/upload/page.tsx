@@ -20,12 +20,13 @@ export default function UploadPage() {
   const jsonLd = toolJsonLd("upload");
   return (
     <ToolLayout slug="upload">
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <UploadTool />
     </ToolLayout>
   );

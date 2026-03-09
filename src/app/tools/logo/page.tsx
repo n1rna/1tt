@@ -23,12 +23,13 @@ export default function LogoPage() {
   const jsonLd = toolJsonLd("logo");
   return (
     <>
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <LogoGenerator />
     </>
   );

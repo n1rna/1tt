@@ -762,7 +762,7 @@ export function WorldClockTool({ focusMode = false }: { focusMode?: boolean }) {
 
 import { ToolLayout } from "@/components/layout/tool-layout";
 
-export function WorldClockPage({ jsonLd }: { jsonLd: Record<string, unknown> | null }) {
+export function WorldClockPage({ jsonLd }: { jsonLd: Record<string, unknown>[] | null }) {
   const [focusMode, setFocusMode] = useState(false);
 
   return (
@@ -782,12 +782,13 @@ export function WorldClockPage({ jsonLd }: { jsonLd: Record<string, unknown> | n
         </button>
       }
     >
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <WorldClockTool focusMode={focusMode} />
     </ToolLayout>
   );

@@ -26,12 +26,13 @@ export default function CurrencyPage() {
   const jsonLd = toolJsonLd("currency");
   return (
     <>
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <style>{`body { overflow: hidden; }`}</style>
       <CurrencyTool />
     </>

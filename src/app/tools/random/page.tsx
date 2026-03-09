@@ -25,12 +25,13 @@ export default function RandomPage() {
   const jsonLd = toolJsonLd("random");
   return (
     <>
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <style>{`body { overflow: hidden; }`}</style>
       <Suspense>
         <RandomGenerator />

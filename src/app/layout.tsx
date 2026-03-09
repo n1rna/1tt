@@ -22,11 +22,11 @@ const SITE_URL = "https://1two.dev";
 
 export const metadata: Metadata = {
   title: {
-    default: "1two.dev — Free Online Developer Tools",
+    default: "1two.dev — Tools that just work",
     template: "%s — 1two.dev",
   },
   description:
-    "Free online developer tools: JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, timestamp converter, color palette builder, UUID generator, and more.",
+    "The tools you actually need — JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, timestamp converter, color picker, UUID generator, DNS lookup, and more. Free, fast, no sign-up.",
   metadataBase: new URL(SITE_URL),
   keywords: [
     "developer tools",
@@ -53,15 +53,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: SITE_URL,
     siteName: "1two.dev",
-    title: "1two.dev — Free Online Developer Tools",
+    title: "1two.dev — Tools that just work",
     description:
-      "Free online developer tools: JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, timestamp converter, color palette builder, UUID generator, and more.",
+      "The tools you actually need — JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, timestamp converter, color picker, UUID generator, DNS lookup, and more. Free, fast, no sign-up.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "1two.dev — Free Online Developer Tools",
+    title: "1two.dev — Tools that just work",
     description:
-      "Free online developer tools: JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, and more.",
+      "The tools you actually need — free, fast, no sign-up. JWT parser, JSON formatter, Base64 encoder, diff viewer, cron builder, and more.",
   },
   robots: {
     index: true,

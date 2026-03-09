@@ -24,12 +24,13 @@ export default function DnsPage() {
   const jsonLd = toolJsonLd("dns");
   return (
     <ToolLayout slug="dns">
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <DnsTool />
     </ToolLayout>
   );

@@ -25,12 +25,13 @@ export default function HashPage() {
   const jsonLd = toolJsonLd("hash");
   return (
     <>
-      {jsonLd && (
+      {jsonLd?.map((item, i) => (
         <script
+          key={i}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(item) }}
         />
-      )}
+      ))}
       <HashTool />
     </>
   );
