@@ -28,7 +28,7 @@
   ],
 
   // Environment variables (set via wrangler secret or dashboard)
-  // DATABASE_URL, BETTER_AUTH_SECRET, etc.
+  // DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL, GITHUB_CLIENT_ID, etc.
 
   "observability": {
     "enabled": true

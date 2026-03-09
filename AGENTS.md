@@ -284,5 +284,123 @@ The invisible mirror text wraps identically to the textarea, so each grid row's 
 - **No `--no-verify`** on git commits — always let hooks run
 - **Keep it simple** — avoid over-engineering, no premature abstractions
 - **Use `bun`** for all package management and script running — never npm/yarn/pnpm
-- **Static export** — `output: "export"` in next.config.ts, deployed to Cloudflare Pages
+- **Cloudflare Workers** — deployed via OpenNext adapter (`@opennextjs/cloudflare`), not static export
 - **SEO** — use `toolMetadata()` + `toolJsonLd()` from `src/lib/tools/seo.ts` for all tool pages
+
+## Deployment Architecture
+
+### Overview
+
+The app deploys to Cloudflare with two services:
+
+1. **Web (Next.js)** → Cloudflare Workers via `@opennextjs/cloudflare`
+2. **API (Go backend)** → Cloudflare Containers (Docker on Durable Objects)
+
+The web worker communicates with the API container via **Service Bindings** (internal, no public URL needed).
+
+### Config Files
+
+- `wrangler.jsonc` — Web worker config (name: `1two-web`, KV for cache, service binding to `onetwo-api`)
+- `open-next.config.ts` — OpenNext adapter config
+- `workers/api-container/wrangler.toml` — Container worker config (name: `onetwo-api`)
+- `workers/api-container/src/index.ts` — Container entrypoint (proxies requests to Go container)
+- `api/Dockerfile` — Go backend Docker image
+
+### Build & Deploy Commands
+
+```bash
+bun run cf:build        # Build Next.js for Cloudflare Workers
+bun run cf:deploy       # Deploy web worker (build + wrangler deploy)
+bun run cf:deploy-api   # Deploy API container
+just deploy             # Deploy both web and API
+```
+
+### GitHub Actions (`.github/workflows/deploy.yml`)
+
+Triggers on push to `main` or manual `workflow_dispatch`. Three jobs:
+
+1. **changes** — Uses `dorny/paths-filter` to detect which services changed
+2. **deploy-web** — Builds and deploys Next.js (skipped if no web changes)
+3. **deploy-api** — Builds and deploys Go container (skipped if no API changes)
+
+`workflow_dispatch` always deploys both services regardless of changes.
+
+### Service Binding (Web → API)
+
+The web app uses `src/lib/api-fetch.ts` to call the Go backend:
+- **On Cloudflare**: Uses the `API_BACKEND` service binding (internal, fast)
+- **Locally**: Falls back to `API_BACKEND_URL` env var (default `http://localhost:8080`)
+
+All API proxy routes (`src/app/api/proxy/[...path]/route.ts`, `src/app/ip/route.ts`) use `apiFetch()`.
+
+## Secret Management
+
+Secrets exist in **three locations**, each serving a different purpose:
+
+### 1. Local Development — `.env.*.production` files
+
+- `.env.web.production` — Web app env vars (gitignored)
+- Managed with `ee` CLI tool
+- Schema defined in `.ee.web` (lists all variable names)
+
+### 2. Build-Time — GitHub Secrets
+
+Used during GitHub Actions CI/CD to inject env vars at build time.
+
+- **`ENV_VARS_WEB`** — Contains all web env vars in ee-encrypted format
+- **`CLOUDFLARE_API_TOKEN`** — Wrangler deploy auth
+- **`CLOUDFLARE_ACCOUNT_ID`** — Cloudflare account identifier
+
+The `n1rna/ee-action` GitHub Action decrypts `ENV_VARS_WEB` and writes `.env.web.production`, which is then sourced before `bun run cf:build`.
+
+### 3. Runtime — Cloudflare Worker Secrets
+
+Set via `wrangler secret put <NAME>` (or `just cf-secret-web` / `just cf-secret-api`).
+
+**Web worker secrets** (set with `--name 1two-web`):
+- `DATABASE_URL` — Neon Postgres connection string
+- `BETTER_AUTH_SECRET` — Auth session signing key
+- `BETTER_AUTH_URL` — Auth callback base URL
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — OAuth
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — OAuth
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — Cloudflare Turnstile
+
+**API container secrets** (set with `--name onetwo-api`):
+- `DATABASE_URL` — Neon Postgres connection string
+- `ALLOWED_ORIGINS` — CORS allowed origins
+- `TURNSTILE_SECRET_KEY` — Turnstile verification
+
+Container env vars are passed to the Docker container via the `envVars` getter in `workers/api-container/src/index.ts`.
+
+### Adding or Updating a Secret
+
+To add/update a secret across all three locations:
+
+```bash
+# 1. Update local file
+ee set .ee.web MY_NEW_VAR "the-value"
+
+# 2. Update GitHub secret (re-export all vars)
+ee export .ee.web | gh secret set ENV_VARS_WEB
+
+# 3. Update Cloudflare runtime secret
+echo "the-value" | wrangler secret put MY_NEW_VAR --name 1two-web
+# or for API:
+echo "the-value" | wrangler secret put MY_NEW_VAR --name onetwo-api
+```
+
+### ee Configuration
+
+- **`.ee.web`** — Schema file listing all web env var names
+- **`ee set <config> <key> <value>`** — Set a value locally
+- **`ee export <config>`** — Export all vars (for piping to `gh secret set`)
+- **`n1rna/ee-action`** — GitHub Action that hydrates env files from GitHub secrets
+
+### Important Notes
+
+- `pg` module does NOT work on Cloudflare Workers (no TCP sockets). Use `@neondatabase/serverless` instead (WebSocket-based, drop-in `Pool` replacement).
+- Real client IP on Cloudflare is in `cf-connecting-ip` header, NOT `x-forwarded-for`.
+- Container cold starts take ~15s. The worker calls `startAndWaitForPorts()` before proxying.
+- Go backend should handle DB failures gracefully (warn, don't crash) since the container restarts are expensive.
+- Build-time env vars (like `NEXT_PUBLIC_*`) must be available when `cf:build` runs — they get baked into the JS bundle.
+- Runtime secrets are accessed via `process.env` in server-side code or `ctx.env` in Cloudflare Workers.
