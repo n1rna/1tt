@@ -50,6 +50,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare environment
+        uses: n1rna/ee-action@main
+        with:
+          environment: production
+          config_path: .ee.web
+          env_file: .env.web.production
+          gh_secret: ${{ secrets.ENV_VARS_WEB }}
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -59,7 +67,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build
-        run: bun run cf:build
+        run: |
+          set -a
+          source .env.web.production
+          set +a
+          bun run cf:build
 
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
