@@ -262,6 +262,8 @@ export interface SearchItem {
   keywords: string[];
   /** Parent tool name for sub-items */
   parent?: string;
+  /** Whether this tool requires authentication */
+  requiresAuth?: boolean;
 }
 
 /** Sub-items that link to specific tabs/modes of a tool */
@@ -284,6 +286,7 @@ export function getSearchItems(): SearchItem[] {
     icon: t.icon,
     href: `/tools/${t.slug}`,
     keywords: t.keywords,
+    requiresAuth: t.requiresAuth,
   }));
 
   for (const sub of SUB_ITEMS) {

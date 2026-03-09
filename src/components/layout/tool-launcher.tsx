@@ -173,7 +173,7 @@ export function ToolLauncher() {
                     <Icon className="h-4 w-4 text-muted-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
+                    <div className="text-sm font-medium truncate flex items-center gap-1.5">
                       {item.parent ? (
                         <>
                           <span className="text-muted-foreground font-normal">
@@ -184,6 +184,12 @@ export function ToolLauncher() {
                         </>
                       ) : (
                         item.name
+                      )}
+                      {item.requiresAuth && (
+                        <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[9px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 shrink-0">
+                          <Icons.Lock className="h-2 w-2" />
+                          Sign in
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground/70 truncate mt-0.5">

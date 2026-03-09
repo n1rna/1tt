@@ -83,6 +83,12 @@ function SortableToolCard({
               <Badge variant="outline" className="text-xs">
                 {categoryLabels[tool.category]}
               </Badge>
+              {tool.requiresAuth && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                  <Icons.Lock className="h-2.5 w-2.5" />
+                  Sign in
+                </span>
+              )}
             </div>
             <CardTitle className="text-lg">{tool.name}</CardTitle>
             <CardDescription>{tool.description}</CardDescription>
@@ -222,6 +228,12 @@ export function ToolGrid() {
                     <Badge variant="outline" className="text-xs">
                       {categoryLabels[tool.category]}
                     </Badge>
+                    {tool.requiresAuth && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                        <Icons.Lock className="h-2.5 w-2.5" />
+                        Sign in
+                      </span>
+                    )}
                   </div>
                   <CardTitle className="text-lg">{tool.name}</CardTitle>
                   <CardDescription>{tool.description}</CardDescription>
