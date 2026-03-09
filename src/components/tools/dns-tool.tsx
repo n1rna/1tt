@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Search, Loader2, AlertCircle, ChevronDown } from "lucide-react";
-import { Turnstile, useTurnstile } from "@/components/ui/turnstile";
+import { Turnstile } from "@/components/ui/turnstile";
 
 const RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "CAA", "PTR"] as const;
 type RecordType = (typeof RECORD_TYPES)[number];
@@ -201,9 +201,8 @@ export function DnsTool() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DnsResponse | null>(null);
   const [selectOpen, setSelectOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
   const selectRef = useRef<HTMLDivElement>(null);
-
-  const { handleToken, handleExpired, getToken, reset } = useTurnstile();
 
   // Close custom select on outside click
   useEffect(() => {
@@ -227,7 +226,11 @@ export function DnsTool() {
       setResult(null);
 
       try {
-        const token = await getToken();
+        if (!token) {
+          setError("Please complete the verification challenge first.");
+          setLoading(false);
+          return;
+        }
 
         const res = await fetch("/api/proxy/dns/lookup", {
           method: "POST",
@@ -235,7 +238,7 @@ export function DnsTool() {
           body: JSON.stringify({ domain: trimmed, type: recordType, turnstileToken: token }),
         });
 
-        reset();
+        setToken(null);
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -246,12 +249,12 @@ export function DnsTool() {
         setResult(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "An unexpected error occurred");
-        reset();
+        setToken(null);
       } finally {
         setLoading(false);
       }
     },
-    [domain, recordType, getToken, reset]
+    [domain, recordType, token]
   );
 
   return (
@@ -311,13 +314,14 @@ export function DnsTool() {
         </button>
       </form>
 
-      {/* Turnstile widget (invisible — managed mode) */}
+      {/* Turnstile verification */}
       {SITE_KEY && (
-        <div aria-hidden className="hidden">
+        <div className="flex justify-end">
           <Turnstile
             siteKey={SITE_KEY}
-            onToken={handleToken}
-            onExpired={handleExpired}
+            size="flexible"
+            onToken={setToken}
+            onExpired={() => setToken(null)}
           />
         </div>
       )}

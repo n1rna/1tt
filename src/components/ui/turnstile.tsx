@@ -35,6 +35,8 @@ interface TurnstileProps {
   onExpired?: () => void;
   /** @default "auto" */
   theme?: "light" | "dark" | "auto";
+  /** @default "invisible" */
+  size?: "normal" | "compact" | "invisible" | "flexible";
 }
 
 const TURNSTILE_SCRIPT_ID = "cf-turnstile-script";
@@ -76,7 +78,7 @@ function loadTurnstileScript(): Promise<void> {
  * The widget auto-solves and calls `onToken` with the resulting token.
  * Call the `reset()` function returned via ref to get a fresh token.
  */
-export function Turnstile({ siteKey, onToken, onError, onExpired, theme = "auto" }: TurnstileProps) {
+export function Turnstile({ siteKey, onToken, onError, onExpired, theme = "auto", size = "invisible" }: TurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
 
@@ -98,13 +100,13 @@ export function Turnstile({ siteKey, onToken, onError, onExpired, theme = "auto"
     widgetIdRef.current = window.turnstile.render(containerRef.current, {
       sitekey: siteKey,
       theme,
-      size: "invisible",
-      appearance: "interaction-only",
+      size,
+      appearance: size === "invisible" ? "interaction-only" : "always",
       callback: onToken,
       "error-callback": onError,
       "expired-callback": onExpired,
     });
-  }, [siteKey, theme, onToken, onError, onExpired]);
+  }, [siteKey, theme, size, onToken, onError, onExpired]);
 
   useEffect(() => {
     initWidget();
