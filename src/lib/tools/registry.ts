@@ -218,6 +218,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["sqlite", "database", "sql", "query", "table", "browse", "db", "data", "explorer", "schema"],
   },
   {
+    slug: "htpasswd",
+    name: "htpasswd Generator",
+    description: "Generate htpasswd password hashes for basic auth — bcrypt, SHA-256, SHA-512, MD5, SSHA",
+    category: "crypto",
+    icon: "Lock",
+    keywords: ["htpasswd", "basic auth", "password", "bcrypt", "sha256", "sha512", "md5", "ssha", "apache", "nginx", "http auth"],
+  },
+  {
     slug: "paste",
     name: "Paste Bin",
     description: "Create and share text snippets with short, shareable links",
