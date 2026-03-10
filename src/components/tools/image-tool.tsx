@@ -348,7 +348,7 @@ export function ImageTool() {
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <div className="max-w-5xl mx-auto p-6 space-y-5">
+        <div className="max-w-6xl mx-auto p-6 space-y-5">
           {/* Drop zone */}
           {!sourceImg && (
             <div>
