@@ -25,11 +25,13 @@ export const metadata = toolMetadata({
 
 async function fetchIpData() {
   const hdrs = await headers();
-  const forwarded = hdrs.get("x-forwarded-for") || hdrs.get("cf-connecting-ip") || "";
+  // cf-connecting-ip is the real client IP on Cloudflare; prefer it over x-forwarded-for
+  const clientIp = hdrs.get("cf-connecting-ip") || hdrs.get("x-forwarded-for") || "";
 
   const forwardHeaders: Record<string, string> = {};
-  if (forwarded) {
-    forwardHeaders["x-forwarded-for"] = forwarded;
+  if (clientIp) {
+    forwardHeaders["x-forwarded-for"] = clientIp;
+    forwardHeaders["x-real-ip"] = clientIp;
   }
 
   let ipv4: string | null = null;
