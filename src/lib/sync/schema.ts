@@ -9,7 +9,7 @@ export const SYNCABLE_KEYS: SyncableKeyDef[] = [
   { key: "1two:calendar-markers", toolSlug: "calendar", label: "Calendar Markers", maxSizeBytes: 65536 },
   { key: "pomodoro-state", toolSlug: "pomodoro", label: "Pomodoro State", maxSizeBytes: 32768 },
   { key: "worldclock-state", toolSlug: "worldclock", label: "World Clock State", maxSizeBytes: 32768 },
-  { key: "dns-lookup-history", toolSlug: "dns", label: "DNS Lookup History", maxSizeBytes: 131072 },
+  { key: "lookup-history", toolSlug: "dns", label: "Lookup History", maxSizeBytes: 262144 },
   { key: "1two-saved-logos", toolSlug: "logo", label: "Saved Logos", maxSizeBytes: 262144 },
   { key: "og-custom-layouts", toolSlug: "og", label: "OG Custom Layouts", maxSizeBytes: 262144 },
   { key: "1two-saved-colors", toolSlug: "color", label: "Saved Colors", maxSizeBytes: 65536 },

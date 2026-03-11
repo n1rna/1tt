@@ -17,7 +17,7 @@ var allowedToolStateKeys = map[string]int64{
 	"1two:calendar-markers": 65536,
 	"pomodoro-state":        32768,
 	"worldclock-state":      32768,
-	"dns-lookup-history":    131072,
+	"lookup-history":        262144,
 	"1two-saved-logos":      262144,
 	"og-custom-layouts":     262144,
 	"1two-saved-colors":     65536,
@@ -36,7 +36,7 @@ var toolStateValidators = map[string]validator{
 	"1two:calendar-markers": validateCalendarMarkers,
 	"pomodoro-state":        validatePomodoroState,
 	"worldclock-state":      validateWorldclockState,
-	"dns-lookup-history":    validateDnsHistory,
+	"lookup-history":        validateLookupHistory,
 	"1two-saved-logos":      validateSavedLogos,
 	"og-custom-layouts":     validateOgLayouts,
 	"1two-saved-colors":     validateSavedColors,
@@ -144,20 +144,26 @@ func validateWorldclockState(data json.RawMessage) error {
 	return nil
 }
 
-func validateDnsHistory(data json.RawMessage) error {
+func validateLookupHistory(data json.RawMessage) error {
 	var arr []struct {
-		Domain     *string `json:"domain"`
-		LastLookup *any    `json:"lastLookup"`
+		ID        *string `json:"id"`
+		Tool      *string `json:"tool"`
+		Query     *string `json:"query"`
+		Timestamp *any    `json:"timestamp"`
 	}
 	if err := json.Unmarshal(data, &arr); err != nil {
-		return fmt.Errorf("must be an array of history entry objects")
+		return fmt.Errorf("must be an array of lookup history objects")
 	}
-	if len(arr) > 200 {
-		return fmt.Errorf("too many items (max 200)")
+	if len(arr) > 500 {
+		return fmt.Errorf("too many items (max 500)")
 	}
+	validTools := map[string]bool{"dns": true, "og": true, "ssl": true}
 	for i, e := range arr {
-		if e.Domain == nil || e.LastLookup == nil {
-			return fmt.Errorf("item %d missing required fields (domain, lastLookup)", i)
+		if e.ID == nil || e.Tool == nil || e.Query == nil || e.Timestamp == nil {
+			return fmt.Errorf("item %d missing required fields (id, tool, query, timestamp)", i)
+		}
+		if !validTools[*e.Tool] {
+			return fmt.Errorf("item %d has invalid tool value", i)
 		}
 	}
 	return nil
