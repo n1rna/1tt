@@ -218,6 +218,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["og", "open graph", "meta tags", "twitter card", "social media", "preview", "seo", "og:image"],
   },
   {
+    slug: "ssl-checker",
+    name: "SSL Certificate Checker",
+    description: "Check SSL/TLS certificates for any domain - view certificate chain, expiry dates, and security details",
+    category: "web",
+    icon: "ShieldCheck",
+    keywords: ["ssl", "tls", "certificate", "https", "security", "expiry", "certificate chain", "x509"],
+  },
+  {
     slug: "sqlite",
     name: "SQLite Browser",
     description: "Open and explore SQLite databases in the browser - browse tables, run SQL queries, sort, filter, and export data",

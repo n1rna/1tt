@@ -60,6 +60,7 @@ func main() {
 		r.Get("/ip/info", handler.IPInfo)
 		r.Post("/dns/lookup", handler.DNSLookup(cfg))
 		r.Post("/og-check", handler.OgCheck(cfg))
+		r.Post("/ssl-check", handler.SslCheck(cfg))
 
 		// Internal routes (protected by secret)
 		if r2 != nil && db != nil {
