@@ -271,6 +271,14 @@ For editors with line numbers that support word wrapping, use a CSS grid mirror:
 
 The invisible mirror text wraps identically to the textarea, so each grid row's height matches the actual wrapped line height. Line numbers stay aligned at the top of each row.
 
+## Config Generator App Definitions
+
+The Config Generator tool (`/tools/config`) lets users generate config files for popular tools via a two-pane UI. Each supported app is a single TypeScript file in `src/lib/tools/config-generator/apps/`.
+
+**Full guide:** `src/lib/tools/config-generator/GUIDE.md` — contains the type reference, step-by-step instructions, complete examples for JSON/nested JSON/custom formats/text formats, conventions, and a checklist.
+
+To add a new app: read the guide, create the app definition file, and register it in `apps/index.ts`.
+
 ## Key Conventions
 
 - **No emojis** in code or UI unless user requests them

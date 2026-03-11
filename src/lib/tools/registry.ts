@@ -266,6 +266,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["og image", "open graph", "social media", "meta image", "twitter card", "facebook", "linkedin", "og builder", "social preview"],
   },
   {
+    slug: "config",
+    name: "Config Generator",
+    description: "Generate config files for popular tools - tsconfig, ESLint, Prettier, Docker Compose, nginx, and more",
+    category: "generators",
+    icon: "Settings",
+    keywords: ["config", "configuration", "tsconfig", "nginx", "eslint", "prettier", "docker", "gitignore", "generate", "yaml", "json", "toml"],
+  },
+  {
     slug: "paste",
     name: "Paste Bin",
     description: "Create and share text snippets with short, shareable links",
@@ -323,6 +331,20 @@ const SUB_ITEMS: Omit<SearchItem, "category" | "icon">[] = [
   { id: "random-base64", name: "Base64 Generator", description: "Generate random Base64-encoded strings", href: "/tools/random?t=base64", keywords: ["base64", "random base64", "token"], parent: "Random Generator" },
   { id: "random-number", name: "Random Number", description: "Generate random numbers in a range", href: "/tools/random?t=number", keywords: ["number", "integer", "random number", "range"], parent: "Random Generator" },
   { id: "random-lorem", name: "Lorem Ipsum Generator", description: "Generate placeholder text", href: "/tools/random?t=lorem", keywords: ["lorem", "ipsum", "placeholder", "dummy text", "filler"], parent: "Random Generator" },
+  // Config Generator sub-items
+  { id: "config-tsconfig", name: "tsconfig Generator", description: "Generate TypeScript tsconfig.json configuration", href: "/tools/config/tsconfig", keywords: ["tsconfig", "typescript", "tsconfig.json", "compiler options"], parent: "Config Generator" },
+  { id: "config-eslint", name: "ESLint Config Generator", description: "Generate ESLint flat configuration", href: "/tools/config/eslint", keywords: ["eslint", "eslint config", "linter", "lint rules"], parent: "Config Generator" },
+  { id: "config-prettier", name: "Prettier Config Generator", description: "Generate Prettier .prettierrc configuration", href: "/tools/config/prettier", keywords: ["prettier", "prettierrc", "formatter", "code format"], parent: "Config Generator" },
+  { id: "config-nginx", name: "nginx Config Generator", description: "Generate nginx.conf server configuration", href: "/tools/config/nginx", keywords: ["nginx", "nginx.conf", "reverse proxy", "web server", "ssl"], parent: "Config Generator" },
+  { id: "config-gitignore", name: ".gitignore Generator", description: "Generate .gitignore with presets for Node, Python, Rust, Go, and more", href: "/tools/config/gitignore", keywords: ["gitignore", "git ignore", "ignore file", "node", "python"], parent: "Config Generator" },
+  { id: "config-kitty", name: "Kitty Config Generator", description: "Generate kitty.conf for the Kitty terminal emulator", href: "/tools/config/kitty", keywords: ["kitty", "kitty.conf", "terminal", "terminal emulator", "kitty config"], parent: "Config Generator" },
+  { id: "config-alacritty", name: "Alacritty Config Generator", description: "Generate alacritty.toml for the Alacritty terminal", href: "/tools/config/alacritty", keywords: ["alacritty", "alacritty.toml", "terminal", "gpu terminal"], parent: "Config Generator" },
+  { id: "config-ohmyzsh", name: "Oh My Zsh Config Generator", description: "Generate .zshrc with Oh My Zsh plugins and themes", href: "/tools/config/ohmyzsh", keywords: ["zsh", "oh my zsh", "zshrc", "shell", "plugins", "themes"], parent: "Config Generator" },
+  { id: "config-zellij", name: "Zellij Config Generator", description: "Generate zellij config.kdl for the Zellij terminal multiplexer", href: "/tools/config/zellij", keywords: ["zellij", "multiplexer", "terminal", "tmux alternative", "kdl"], parent: "Config Generator" },
+  { id: "config-bitcoin", name: "Bitcoin Config Generator", description: "Generate bitcoin.conf for Bitcoin Core", href: "/tools/config/bitcoin", keywords: ["bitcoin", "bitcoin.conf", "btc", "node", "blockchain", "bitcoin core"], parent: "Config Generator" },
+  { id: "config-ssh", name: "SSH Config Generator", description: "Generate SSH client config file", href: "/tools/config/ssh", keywords: ["ssh", "ssh config", "ssh_config", "remote", "key", "proxy jump"], parent: "Config Generator" },
+  { id: "config-nextconfig", name: "Next.js Config Generator", description: "Generate next.config.ts for Next.js projects", href: "/tools/config/nextconfig", keywords: ["nextjs", "next.config", "next.js", "react", "app router"], parent: "Config Generator" },
+  { id: "config-tmux", name: "tmux Config Generator", description: "Generate .tmux.conf for tmux terminal multiplexer", href: "/tools/config/tmux", keywords: ["tmux", "tmux.conf", "terminal", "multiplexer", "session"], parent: "Config Generator" },
 ];
 
 export function getSearchItems(): SearchItem[] {
