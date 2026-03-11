@@ -1,10 +1,11 @@
 "use client";
 
 import { useSession, signOut } from "@/lib/auth-client";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useRef, useEffect } from "react";
 import { SignInDialog } from "./sign-in-dialog";
+import Link from "next/link";
 
 export function UserMenu() {
   const { data: session, isPending } = useSession();
@@ -63,6 +64,14 @@ export function UserMenu() {
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
           <div className="p-1">
+            <Link
+              href="/account/sync"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors"
+              onClick={() => setMenuOpen(false)}
+            >
+              <Cloud className="h-4 w-4" />
+              Cloud Sync
+            </Link>
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-destructive"
               onClick={() => { signOut(); setMenuOpen(false); }}

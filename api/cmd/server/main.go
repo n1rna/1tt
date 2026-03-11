@@ -86,6 +86,7 @@ func main() {
 				r.Delete("/pastes/{id}", handler.DeletePaste(db))
 
 				r.Get("/tool-state", handler.ListToolState(db))
+				r.Get("/tool-state/summary", handler.SummaryToolState(db))
 				r.Put("/tool-state", handler.PutToolState(db))
 				r.Delete("/tool-state", handler.DeleteToolState(db))
 			}

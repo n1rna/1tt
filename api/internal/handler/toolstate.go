@@ -260,6 +260,56 @@ type putToolStateRequest struct {
 	Data json.RawMessage `json:"data"`
 }
 
+// SummaryToolState handles GET /tool-state/summary.
+// Auth required. Returns key, size, updatedAt for all entries (no data payload).
+func SummaryToolState(db *sql.DB) http.HandlerFunc {
+	type summaryEntry struct {
+		Key       string `json:"key"`
+		Size      int64  `json:"size"`
+		UpdatedAt string `json:"updatedAt"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := middleware.GetUserID(r.Context())
+		if userID == "" {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		const q = `
+			SELECT key, size, updated_at
+			FROM tool_state
+			WHERE user_id = $1
+			ORDER BY key`
+
+		rows, err := db.QueryContext(r.Context(), q, userID)
+		if err != nil {
+			http.Error(w, `{"error":"failed to list tool states"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		entries := make([]summaryEntry, 0)
+		for rows.Next() {
+			var e summaryEntry
+			var updatedAt time.Time
+			if err := rows.Scan(&e.Key, &e.Size, &updatedAt); err != nil {
+				http.Error(w, `{"error":"failed to read tool states"}`, http.StatusInternalServerError)
+				return
+			}
+			e.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
+			entries = append(entries, e)
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, `{"error":"failed to iterate tool states"}`, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"states": entries})
+	}
+}
+
 // ListToolState handles GET /tool-state.
 // Auth required. Optional query param `key` narrows the response to a single entry.
 func ListToolState(db *sql.DB) http.HandlerFunc {
