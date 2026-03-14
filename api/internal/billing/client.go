@@ -103,6 +103,15 @@ func (c *Client) EnsureCustomer(ctx context.Context, db *sql.DB, userID, email, 
 	}
 	defer resp2.Body.Close()
 
+	// If 422 (email already exists), look up by email and update external ID
+	if resp2.StatusCode == 422 {
+		customerID, lookupErr := c.lookupAndLinkByEmail(ctx, db, userID, email)
+		if lookupErr != nil {
+			return "", fmt.Errorf("billing: create customer: email exists, lookup failed: %w", lookupErr)
+		}
+		return customerID, nil
+	}
+
 	if resp2.StatusCode != 201 && resp2.StatusCode != 200 {
 		body, _ := io.ReadAll(resp2.Body)
 		return "", fmt.Errorf("billing: create customer: HTTP %d: %s", resp2.StatusCode, string(body))
@@ -119,6 +128,51 @@ func (c *Client) EnsureCustomer(ctx context.Context, db *sql.DB, userID, email, 
 		userID, created.ID)
 
 	return created.ID, nil
+}
+
+// lookupAndLinkByEmail finds an existing Polar customer by email and links them to the user.
+func (c *Client) lookupAndLinkByEmail(ctx context.Context, db *sql.DB, userID, email string) (string, error) {
+	resp, err := c.do(ctx, "GET", fmt.Sprintf("/v1/customers/?email=%s&limit=1", email), nil)
+	if err != nil {
+		return "", fmt.Errorf("lookup by email: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("lookup by email: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("lookup by email: decode: %w", err)
+	}
+	if len(result.Items) == 0 {
+		return "", fmt.Errorf("lookup by email: no customer found for %s", email)
+	}
+
+	customerID := result.Items[0].ID
+
+	// Update the external customer ID to link to our user
+	updatePayload := map[string]any{"external_customer_id": userID}
+	resp2, err := c.do(ctx, "PATCH", fmt.Sprintf("/v1/customers/%s", customerID), updatePayload)
+	if err != nil {
+		log.Printf("billing: failed to update external ID for customer %s: %v", customerID, err)
+	} else {
+		resp2.Body.Close()
+	}
+
+	// Cache
+	db.ExecContext(ctx,
+		`INSERT INTO billing_customers (user_id, polar_customer_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		userID, customerID)
+
+	log.Printf("billing: linked existing customer %s (email=%s) to user %s", customerID, email, userID)
+	return customerID, nil
 }
 
 // IngestEvent sends a usage event to Polar's event ingestion endpoint.
