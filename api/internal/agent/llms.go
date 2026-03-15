@@ -292,9 +292,25 @@ func GenerateLlmsTxt(ctx context.Context, llmCfg LLMConfig, pages []crawl.CrawlP
 	}
 
 	usage := TokenUsage{}
-	if resp.Usage != nil {
+	if resp.Usage != nil && (resp.Usage.InputTokens > 0 || resp.Usage.OutputTokens > 0) {
 		usage.InputTokens = resp.Usage.InputTokens
 		usage.OutputTokens = resp.Usage.OutputTokens
+	} else {
+		// The agent SDK may not aggregate token usage across multi-turn tool calls.
+		// Estimate based on content size (~4 chars per token) to ensure billing works.
+		totalChars := len(input) + len(result)
+		for _, p := range pages {
+			totalChars += len(p.Markdown) + len(p.Title)
+		}
+		// Conservative estimate: input tokens ≈ total chars / 4, output ≈ result / 4
+		usage.InputTokens = (totalChars - len(result)) / 4
+		usage.OutputTokens = len(result) / 4
+		if usage.InputTokens < 100 {
+			usage.InputTokens = 100
+		}
+		if usage.OutputTokens < 50 {
+			usage.OutputTokens = 50
+		}
 	}
 
 	return result, usage, nil
