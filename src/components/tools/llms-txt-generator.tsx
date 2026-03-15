@@ -299,7 +299,7 @@ export function ReasoningStep({
         style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <div className="px-4 pb-4 pt-0">{children}</div>
+          <div className="px-4 pb-4 pt-2">{children}</div>
         </div>
       </div>
     </div>
