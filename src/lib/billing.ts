@@ -8,12 +8,21 @@ export interface UsageMetric {
   overageEnabled: boolean;
 }
 
+export interface ResourceMetric {
+  current: number;
+  limit: number;
+}
+
 export interface BillingStatus {
   plan: "free" | "pro" | "max";
   status: "active" | "trialing" | "canceled" | "none";
   cancelAtPeriodEnd: boolean;
   periodEnd: string | null;
   usage: Record<string, UsageMetric>;
+  resources: {
+    databases: ResourceMetric;
+    sqliteDbs: ResourceMetric;
+  };
   limits: {
     ogCollections: number | null; // null = unlimited
     databasesMax: number;

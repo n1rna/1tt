@@ -40,6 +40,16 @@ func GetBillingStatus(db *sql.DB, billingClient *billing.Client) http.HandlerFun
 		ogViewUsage, _ := billing.GetCurrentUsage(r.Context(), db, userID, "og-image-view")
 		aiTokenUsage, _ := billing.GetCurrentUsage(r.Context(), db, userID, "ai-token-used")
 
+		// Get resource counts
+		var pgCount int
+		db.QueryRowContext(r.Context(),
+			`SELECT COUNT(*) FROM user_databases WHERE user_id = $1 AND status NOT IN ('deleted', 'deleting')`,
+			userID).Scan(&pgCount)
+		var sqliteCount int
+		db.QueryRowContext(r.Context(),
+			`SELECT COUNT(*) FROM user_sqlite_dbs WHERE user_id = $1 AND status = 'active'`,
+			userID).Scan(&sqliteCount)
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"plan":              tier,
@@ -63,10 +73,20 @@ func GetBillingStatus(db *sql.DB, billingClient *billing.Client) http.HandlerFun
 					"overageEnabled": limits.OverageEnabled,
 				},
 			},
+			"resources": map[string]any{
+				"databases": map[string]any{
+					"current": pgCount,
+					"limit":   limits.DatabasesMax,
+				},
+				"sqliteDbs": map[string]any{
+					"current": sqliteCount,
+					"limit":   limits.SqliteDbsMax,
+				},
+			},
 			"limits": map[string]any{
-				"ogCollections":  limits.OgCollections,
-				"databasesMax":   limits.DatabasesMax,
-				"sqliteDbsMax":   limits.SqliteDbsMax,
+				"ogCollections":   limits.OgCollections,
+				"databasesMax":    limits.DatabasesMax,
+				"sqliteDbsMax":    limits.SqliteDbsMax,
 				"sqliteMaxSizeMB": limits.SqliteMaxSizeMB,
 			},
 		})

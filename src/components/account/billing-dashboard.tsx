@@ -59,6 +59,9 @@ const PLAN_FEATURE_LIST: {
   },
   { label: "AI Tokens / month", free: "0", pro: "100,000", max: "500,000" },
   { label: "OG Collections", free: "1", pro: "10", max: "Unlimited" },
+  { label: "Postgres databases", free: "0", pro: "1", max: "3" },
+  { label: "SQLite databases", free: "0", pro: "3", max: "10" },
+  { label: "SQLite max file size", free: "—", pro: "10 MB", max: "50 MB" },
   { label: "Overage billing", free: "—", pro: "Yes", max: "Yes" },
 ];
 
@@ -204,6 +207,41 @@ function UsageBar({
           <span className="text-red-500">Approaching limit</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function ResourceBar({
+  label,
+  current,
+  limit,
+}: {
+  label: string;
+  current: number;
+  limit: number;
+}) {
+  const pct = limit > 0 ? Math.min((current / limit) * 100, 100) : 0;
+  const atLimit = limit > 0 && current >= limit;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span
+          className={`tabular-nums font-medium ${atLimit ? "text-red-500" : limit === 0 ? "text-muted-foreground" : usageTextColor(pct)}`}
+        >
+          {current} / {limit}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${limit === 0 ? "bg-muted-foreground/30" : usageColor(pct)}`}
+          style={{ width: limit > 0 ? `${pct}%` : "0%" }}
+        />
+      </div>
+      {atLimit && (
+        <div className="text-xs text-red-500">Limit reached</div>
+      )}
     </div>
   );
 }
@@ -579,6 +617,29 @@ function BillingDashboardInner() {
           </div>
         )}
       </div>
+
+      {/* Resource usage */}
+      {!loading && billing?.resources && (
+        <div>
+          <h2 className="text-sm font-medium mb-3">Resources</h2>
+          <div className="rounded-lg border divide-y">
+            <div className="px-4 py-4">
+              <ResourceBar
+                label="Postgres databases"
+                current={billing.resources.databases.current}
+                limit={billing.resources.databases.limit}
+              />
+            </div>
+            <div className="px-4 py-4">
+              <ResourceBar
+                label="SQLite databases"
+                current={billing.resources.sqliteDbs.current}
+                limit={billing.resources.sqliteDbs.limit}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Plan comparison — Wobble Cards */}
       <div>
