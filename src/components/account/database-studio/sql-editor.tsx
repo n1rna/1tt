@@ -9,7 +9,7 @@ import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
 import { autocompletion, completionKeymap } from "@codemirror/autocomplete";
 import { tags } from "@lezer/highlight";
 import { useTheme } from "next-themes";
-import { Play, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Play, Loader2, AlertTriangle, CheckCircle2, Sparkles, PanelTopClose, PanelBottomClose, GripHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CellValue, QueryExecutor, SqlDialect, TableSchema, AiSession } from "./types";
@@ -554,30 +554,57 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
       ? result.rows.length
       : null;
 
+  // ── Resizable panels + collapsible AI bar ─────────────────────────────────
+
+  const [editorHeight, setEditorHeight] = useState(200);
+  const [aiBarOpen, setAiBarOpen] = useState(true);
+  const editorResizing = useRef(false);
+  const resultsResizing = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleEditorResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    editorResizing.current = true;
+    const startY = e.clientY;
+    const startH = editorHeight;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!editorResizing.current) return;
+      setEditorHeight(Math.max(80, Math.min(600, startH + (ev.clientY - startY))));
+    };
+    const onUp = () => {
+      editorResizing.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [editorHeight]);
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Editor */}
-      <div className="border-b overflow-hidden shrink-0">
+    <div ref={containerRef} className="flex flex-col h-full overflow-hidden">
+      {/* Editor — resizable */}
+      <div
+        className="border-b overflow-hidden shrink-0"
+        style={{ height: `${editorHeight}px` }}
+      >
         <div
           ref={editorContainerRef}
-          className="min-h-[150px] max-h-[40vh] overflow-auto"
+          className="h-full overflow-auto"
         />
       </div>
 
-      {/* AI SQL bar */}
-      <AiSqlBar
-        schema={schema ?? []}
-        dialect={dialect}
-        onSqlGenerated={setEditorContent}
-        aiEnabled={aiEnabled}
-        aiSession={aiSession}
-        onAiSessionChange={onAiSessionChange}
-        getEditorContent={() => editorViewRef.current?.state.doc.toString() ?? ""}
-        lastQuerySummary={lastQuerySummary}
-      />
+      {/* Resize handle: editor ↔ middle section */}
+      <div
+        onMouseDown={handleEditorResize}
+        className="h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors flex items-center justify-center group"
+        title="Drag to resize editor"
+      >
+        <GripHorizontal className="h-2.5 w-2.5 text-muted-foreground/30 group-hover:text-muted-foreground/60" />
+      </div>
 
-      {/* Run button + meta */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/10 shrink-0">
+      {/* Run button bar + AI toggle */}
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10 shrink-0">
         <Button
           size="sm"
           className="h-7 gap-1.5 text-xs"
@@ -592,32 +619,63 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
           {loading ? "Running…" : "Run Query"}
         </Button>
         <span className="text-xs text-muted-foreground">
-          {isDark
-            ? "Cmd"
-            : typeof navigator !== "undefined" &&
-              navigator.platform?.includes("Mac")
+          {typeof navigator !== "undefined" && navigator.platform?.includes("Mac")
             ? "⌘"
             : "Ctrl"}
-          +Enter to run
+          +Enter
         </span>
         <div className="flex-1" />
         {execMs !== null && execMs !== undefined && (
-          <span className="text-xs text-muted-foreground">{execMs}ms</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{execMs}ms</span>
         )}
         {isMultiResult && (
           <span className="text-xs text-muted-foreground">
-            {result.results!.length} statement{result.results!.length === 1 ? "" : "s"}
+            {result.results!.length} stmt{result.results!.length === 1 ? "" : "s"}
           </span>
         )}
         {rowCount !== null && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {rowCount} row{rowCount === 1 ? "" : "s"}
           </span>
         )}
+
+        {/* AI toggle */}
+        <button
+          onClick={() => setAiBarOpen((v) => !v)}
+          className={cn(
+            "flex items-center gap-1 h-6 px-2 rounded text-[11px] transition-colors",
+            aiBarOpen
+              ? "bg-primary/10 text-primary hover:bg-primary/15"
+              : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50"
+          )}
+          title={aiBarOpen ? "Hide AI assistant" : "Show AI assistant"}
+        >
+          <Sparkles className="h-3 w-3" />
+          AI
+        </button>
       </div>
 
-      {/* Results */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      {/* AI SQL bar — collapsible */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-in-out shrink-0"
+        style={{ gridTemplateRows: aiBarOpen ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <AiSqlBar
+            schema={schema ?? []}
+            dialect={dialect}
+            onSqlGenerated={setEditorContent}
+            aiEnabled={aiEnabled}
+            aiSession={aiSession}
+            onAiSessionChange={onAiSessionChange}
+            getEditorContent={() => editorViewRef.current?.state.doc.toString() ?? ""}
+            lastQuerySummary={lastQuerySummary}
+          />
+        </div>
+      </div>
+
+      {/* Results — fills remaining space */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {result?.results && result.results.length > 0 ? (
           <MultiResultsView results={result.results} />
         ) : (
