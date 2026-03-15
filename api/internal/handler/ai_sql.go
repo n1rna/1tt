@@ -133,10 +133,25 @@ func formatSchema(tables []aiSqlTable) string {
 }
 
 // buildSystemPrompt constructs the SQL-generation system prompt.
+// For the "elasticsearch" dialect the tables parameter is unused; the caller
+// is expected to supply index mappings via the conversation messages instead.
 func buildSystemPrompt(dialect string, tables []aiSqlTable) string {
 	if dialect == "" {
 		dialect = "postgres"
 	}
+
+	if dialect == "elasticsearch" {
+		// Mappings are injected by the frontend as a system message in
+		// conversation mode.  This single-turn path is a fallback.
+		return `You are an Elasticsearch expert. Generate a valid Elasticsearch query body (JSON) based on the user's request.
+
+Rules:
+- Output ONLY valid JSON — the complete request body for _search
+- No markdown formatting, no code fences, no explanations
+- Include "size": 10 unless the user specifies otherwise
+- Use the appropriate query types: match, term, range, bool, etc.`
+	}
+
 	schemaTxt := formatSchema(tables)
 	return fmt.Sprintf(`You are a SQL expert for %s databases. Generate a single SQL query based on the user's request.
 
@@ -156,10 +171,11 @@ Rules:
 // a fenced SQL block so that parseAiResponse can split them cleanly.
 const conversationSystemSuffix = "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
 
-// stripMarkdownFences removes optional ```sql ... ``` or ``` ... ``` fences from LLM output.
+// stripMarkdownFences removes optional ```sql ... ```, ```json ... ```, or
+// plain ``` ... ``` fences from LLM output.
 func stripMarkdownFences(s string) string {
 	s = strings.TrimSpace(s)
-	// Remove opening fence: ```sql or ```
+	// Remove opening fence: ```sql, ```json, or ```
 	if strings.HasPrefix(s, "```") {
 		// Drop the first line (the fence line)
 		idx := strings.Index(s, "\n")
@@ -184,19 +200,37 @@ func stripMarkdownFences(s string) string {
 //   - If no fence is present: the entire content is treated as SQL (legacy
 //     behaviour), and reasoning is empty.
 func parseAiResponse(content string) (reasoning, sqlOut string) {
-	const openFence = "```sql"
+	// Recognise both ```sql and ```json opening fences.
+	openFences := []string{"```sql", "```json", "```"}
 	const closeFence = "```"
 
-	start := strings.Index(content, openFence)
+	start := -1
+	openLen := 0
+	for _, fence := range openFences {
+		idx := strings.Index(content, fence)
+		if idx == -1 {
+			continue
+		}
+		// For the plain ``` fence make sure it is not the closing fence of an
+		// already-matched opening fence (i.e. only use it when none of the
+		// language-tagged fences matched).
+		if fence == "```" && start != -1 {
+			break
+		}
+		start = idx
+		openLen = len(fence)
+		break
+	}
+
 	if start == -1 {
-		// No fence — treat the whole response as SQL.
+		// No fence — treat the whole response as raw content.
 		return "", stripMarkdownFences(content)
 	}
 
 	reasoning = strings.TrimSpace(content[:start])
 
 	// Advance past the opening fence line.
-	afterOpen := content[start+len(openFence):]
+	afterOpen := content[start+openLen:]
 	// Skip the newline immediately following the fence marker.
 	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
 		afterOpen = afterOpen[1:]
@@ -204,7 +238,7 @@ func parseAiResponse(content string) (reasoning, sqlOut string) {
 
 	end := strings.Index(afterOpen, closeFence)
 	if end == -1 {
-		// Closing fence missing — use everything after the open fence as SQL.
+		// Closing fence missing — use everything after the open fence.
 		sqlOut = strings.TrimSpace(afterOpen)
 		return reasoning, sqlOut
 	}
@@ -390,6 +424,9 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 // GenerateAiSqlSuggestions handles POST /ai/sql/suggestions.
 // Auth required. Rule-based — no LLM call. Analyzes the schema and returns
 // up to 8 canned query suggestions.
+//
+// When dialect == "elasticsearch" the schema field is ignored and the
+// fields field ([]string) is used to derive ES-specific suggestions.
 func GenerateAiSqlSuggestions(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
@@ -397,17 +434,39 @@ func GenerateAiSqlSuggestions(db *sql.DB) http.HandlerFunc {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
-		// Suppress "declared but not used" — userID is validated above.
 		_ = userID
 
-		var req aiSqlSuggestionsRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Use a flexible decoder so we can handle both SQL and ES requests.
+		var raw map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
 		}
 
-		suggestions := buildSuggestions(req.Schema, req.Dialect)
+		var dialect string
+		if d, ok := raw["dialect"]; ok {
+			_ = json.Unmarshal(d, &dialect)
+		}
 
+		if dialect == "elasticsearch" {
+			var fields []string
+			if f, ok := raw["fields"]; ok {
+				_ = json.Unmarshal(f, &fields)
+			}
+			suggestions := buildEsSuggestions(fields)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(aiSqlSuggestionsResponse{Suggestions: suggestions})
+			return
+		}
+
+		// SQL path — unmarshal into the typed struct.
+		var req aiSqlSuggestionsRequest
+		if s, ok := raw["schema"]; ok {
+			_ = json.Unmarshal(s, &req.Schema)
+		}
+		req.Dialect = dialect
+
+		suggestions := buildSuggestions(req.Schema, req.Dialect)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(aiSqlSuggestionsResponse{Suggestions: suggestions})
 	}
@@ -519,6 +578,97 @@ func buildSuggestions(tables []aiSqlTable, dialect string) []aiSqlSuggestion {
 				),
 			) {
 				return suggestions
+			}
+		}
+	}
+
+	return suggestions
+}
+
+// ─── Elasticsearch suggestion helpers ────────────────────────────────────────
+
+// esFieldKind classifies a bare field name into a simple kind used to pick the
+// right suggestion template.
+type esFieldKind int
+
+const (
+	esKindDate    esFieldKind = iota
+	esKindNumeric esFieldKind = iota
+	esKindText    esFieldKind = iota
+)
+
+func classifyEsField(name string) esFieldKind {
+	n := strings.ToLower(name)
+	// Date / time heuristics
+	if strings.Contains(n, "date") || strings.Contains(n, "time") ||
+		strings.Contains(n, "created") || strings.Contains(n, "updated") ||
+		strings.Contains(n, "timestamp") || strings.Contains(n, "at") {
+		return esKindDate
+	}
+	// Numeric heuristics
+	if strings.Contains(n, "count") || strings.Contains(n, "total") ||
+		strings.Contains(n, "amount") || strings.Contains(n, "price") ||
+		strings.Contains(n, "size") || strings.Contains(n, "num") ||
+		strings.Contains(n, "score") || strings.Contains(n, "age") {
+		return esKindNumeric
+	}
+	return esKindText
+}
+
+// buildEsSuggestions generates rule-based Elasticsearch query suggestions from
+// a list of field names.  It always starts with "Match all documents" and then
+// adds up to 7 field-specific chips.
+func buildEsSuggestions(fields []string) []aiSqlSuggestion {
+	const max = 8
+	var suggestions []aiSqlSuggestion
+
+	add := func(label, body string) bool {
+		if len(suggestions) >= max {
+			return false
+		}
+		suggestions = append(suggestions, aiSqlSuggestion{Label: label, SQL: body})
+		return true
+	}
+
+	// 1. Always include match_all.
+	add("Match all documents", `{"query":{"match_all":{}},"size":10}`)
+
+	seenDate := false
+	seenNumeric := false
+
+	for _, f := range fields {
+		if len(suggestions) >= max {
+			break
+		}
+		kind := classifyEsField(f)
+		switch kind {
+		case esKindDate:
+			if !seenDate {
+				seenDate = true
+				add(
+					fmt.Sprintf("Recent by %s", f),
+					fmt.Sprintf(`{"query":{"range":{"%s":{"gte":"now-7d/d"}}},"sort":[{"%s":{"order":"desc"}}],"size":10}`, f, f),
+				)
+			}
+		case esKindNumeric:
+			if !seenNumeric {
+				seenNumeric = true
+				add(
+					fmt.Sprintf("Stats on %s", f),
+					fmt.Sprintf(`{"aggs":{"stats":{"stats":{"field":"%s"}}},"size":0}`, f),
+				)
+			}
+		case esKindText:
+			add(
+				fmt.Sprintf("Search %s", f),
+				fmt.Sprintf(`{"query":{"match":{"%s":{"query":"value"}}},"size":10}`, f),
+			)
+			// Add a terms aggregation for the first text/keyword field too.
+			if len(suggestions) < max {
+				add(
+					fmt.Sprintf("Top %s values", f),
+					fmt.Sprintf(`{"aggs":{"top_%s":{"terms":{"field":"%s.keyword","size":10}}},"size":0}`, f, f),
+				)
 			}
 		}
 	}

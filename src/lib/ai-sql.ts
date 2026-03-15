@@ -92,3 +92,77 @@ export async function getAiSqlSuggestions(
   const data = await res.json() as { suggestions?: SqlSuggestion[] };
   return data.suggestions ?? [];
 }
+
+// ─── Elasticsearch helpers ────────────────────────────────────────────────────
+
+export interface EsAiResponse {
+  sql: string;  // re-uses the "sql" field name — contains the JSON query body
+  reasoning?: string;
+  tokensUsed: number;
+  error?: string;
+}
+
+/**
+ * Generate an Elasticsearch query body from a natural-language prompt.
+ * Uses the existing /ai/sql endpoint with dialect "elasticsearch" and a
+ * system message that describes the index mappings.
+ */
+export async function generateEsAiQuery(
+  prompt: string,
+  mappingFields: string[],
+  selectedIndex: string,
+): Promise<EsAiResponse> {
+  const mappingText = mappingFields.length > 0
+    ? mappingFields.map((f) => `  ${f}`).join("\n")
+    : "  (no fields known)";
+
+  const systemMessage = {
+    role: "system" as const,
+    content: `You are an Elasticsearch expert. Generate a valid Elasticsearch query body (JSON) based on the user's request.
+
+Index: ${selectedIndex || "*"}
+Known fields:
+${mappingText}
+
+Rules:
+- Output ONLY valid JSON — the complete request body for _search
+- No markdown formatting, no code fences, no explanations
+- Use exact field names from the list above
+- Include "size": 10 unless the user specifies otherwise
+- Use the appropriate query types: match, term, range, bool, etc.`,
+  };
+
+  const messages = [
+    systemMessage,
+    { role: "user" as const, content: prompt },
+  ];
+
+  const res = await fetch("/api/proxy/ai/sql", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, dialect: "elasticsearch" }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return { sql: "", tokensUsed: 0, error: (err as { error?: string }).error ?? `HTTP ${res.status}` };
+  }
+  return res.json() as Promise<EsAiResponse>;
+}
+
+/**
+ * Fetch rule-based Elasticsearch query suggestions derived from field names.
+ */
+export async function getEsAiSuggestions(
+  fields: string[],
+): Promise<SqlSuggestion[]> {
+  const res = await fetch("/api/proxy/ai/sql/suggestions", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields, dialect: "elasticsearch" }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json() as { suggestions?: SqlSuggestion[] };
+  return data.suggestions ?? [];
+}

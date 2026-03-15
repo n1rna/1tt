@@ -71,6 +71,7 @@
     "@kubb/plugin-oas": "^4.33.0",
     "@kubb/plugin-react-query": "^4.33.0",
     "@kubb/plugin-ts": "^4.33.0",
+    "@next/bundle-analyzer": "^16.1.6",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@tanstack/react-query-devtools": "^5.91.3",

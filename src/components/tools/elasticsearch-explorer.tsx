@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useBillingStatus } from "@/lib/billing";
+import { EsAiBar } from "@/components/tools/es-ai-bar";
 import {
   Database,
   Server,
@@ -1090,6 +1092,9 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
   const [copied, setCopied] = useState(false);
   const [allColumns, setAllColumns] = useState<string[]>([]);
 
+  const { data: billing } = useBillingStatus();
+  const aiEnabled = billing != null && (billing.plan === "pro" || billing.plan === "max");
+
   useEffect(() => {
     esFetch(conn, "/_cat/indices?format=json&h=index")
       .then((d) => {
@@ -1229,6 +1234,20 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
           <JsonEditor value={query} onChange={setQuery} onRun={() => runQuery()} />
         </div>
       </div>
+
+      {/* AI bar */}
+      <EsAiBar
+        mappingFields={allColumns}
+        selectedIndex={selectedIndex}
+        onQueryGenerated={(json) => setQuery(json)}
+        aiEnabled={aiEnabled}
+        getEditorContent={() => query}
+        lastQuerySummary={
+          results
+            ? `${results.hits?.total?.value ?? 0} hits in ${results.took ?? 0}ms`
+            : undefined
+        }
+      />
 
       {/* Run bar */}
       <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/10 shrink-0">
