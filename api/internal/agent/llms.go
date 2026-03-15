@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/Ingenimax/agent-sdk-go/pkg/agent"
-	"github.com/Ingenimax/agent-sdk-go/pkg/interfaces"
-	anthropicllm "github.com/Ingenimax/agent-sdk-go/pkg/llm/anthropic"
-	openaillm "github.com/Ingenimax/agent-sdk-go/pkg/llm/openai"
-	"github.com/Ingenimax/agent-sdk-go/pkg/memory"
-	"github.com/Ingenimax/agent-sdk-go/pkg/multitenancy"
+	anthropic "github.com/anthropics/anthropic-sdk-go"
+	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
+	openai "github.com/openai/openai-go/v2"
+	openaioption "github.com/openai/openai-go/v2/option"
+	"github.com/openai/openai-go/v2/packages/param"
+
 	"github.com/n1rna/1two/api/internal/crawl"
 )
 
@@ -67,10 +67,10 @@ type TokenUsage struct {
 
 // pageStore holds crawled pages indexed by URL for tool access.
 type pageStore struct {
-	pages   []crawl.CrawlPage
-	byURL   map[string]*crawl.CrawlPage
-	result  string
-	mu      sync.Mutex
+	pages  []crawl.CrawlPage
+	byURL  map[string]*crawl.CrawlPage
+	result string
+	mu     sync.Mutex
 }
 
 func newPageStore(pages []crawl.CrawlPage) *pageStore {
@@ -87,15 +87,9 @@ type listPagesTool struct {
 	store *pageStore
 }
 
-func (t *listPagesTool) Name() string        { return "list_pages" }
+func (t *listPagesTool) Name() string { return "list_pages" }
 func (t *listPagesTool) Description() string {
 	return "List all crawled pages with their URL, title, and content size. Use this first to understand the site structure before reading specific pages."
-}
-func (t *listPagesTool) Parameters() map[string]interfaces.ParameterSpec {
-	return map[string]interfaces.ParameterSpec{}
-}
-func (t *listPagesTool) Run(ctx context.Context, input string) (string, error) {
-	return t.Execute(ctx, input)
 }
 func (t *listPagesTool) Execute(ctx context.Context, args string) (string, error) {
 	var sb strings.Builder
@@ -117,21 +111,9 @@ type readPageTool struct {
 	store *pageStore
 }
 
-func (t *readPageTool) Name() string        { return "read_page" }
+func (t *readPageTool) Name() string { return "read_page" }
 func (t *readPageTool) Description() string {
 	return "Read the full markdown content of a specific crawled page by URL. Use this to inspect pages that seem important for building the llms.txt file."
-}
-func (t *readPageTool) Parameters() map[string]interfaces.ParameterSpec {
-	return map[string]interfaces.ParameterSpec{
-		"url": {
-			Type:        "string",
-			Description: "The URL of the page to read",
-			Required:    true,
-		},
-	}
-}
-func (t *readPageTool) Run(ctx context.Context, input string) (string, error) {
-	return t.Execute(ctx, input)
 }
 func (t *readPageTool) Execute(ctx context.Context, args string) (string, error) {
 	var params struct {
@@ -171,21 +153,9 @@ type writeLlmsTxtTool struct {
 	store *pageStore
 }
 
-func (t *writeLlmsTxtTool) Name() string        { return "write_llms_txt" }
+func (t *writeLlmsTxtTool) Name() string { return "write_llms_txt" }
 func (t *writeLlmsTxtTool) Description() string {
 	return "Write the final llms.txt content. Call this once you have analyzed the site structure and page content. Pass the complete llms.txt file content."
-}
-func (t *writeLlmsTxtTool) Parameters() map[string]interfaces.ParameterSpec {
-	return map[string]interfaces.ParameterSpec{
-		"content": {
-			Type:        "string",
-			Description: "The complete llms.txt file content",
-			Required:    true,
-		},
-	}
-}
-func (t *writeLlmsTxtTool) Run(ctx context.Context, input string) (string, error) {
-	return t.Execute(ctx, input)
 }
 func (t *writeLlmsTxtTool) Execute(ctx context.Context, args string) (string, error) {
 	var params struct {
@@ -205,112 +175,319 @@ func (t *writeLlmsTxtTool) Execute(ctx context.Context, args string) (string, er
 	return "llms.txt written successfully.", nil
 }
 
-// GenerateLlmsTxt creates an AI agent that analyzes crawled pages and produces
-// a structured llms.txt file. The agent uses tools to inspect pages selectively
-// rather than dumping everything into context.
-//
-// sourceType should be "github" for cloned repos, or "website" for crawled sites.
-func GenerateLlmsTxt(ctx context.Context, llmCfg LLMConfig, pages []crawl.CrawlPage, detailLevel string, sourceType string) (string, TokenUsage, error) {
-	// The agent-sdk-go memory system requires org ID and conversation ID in context.
-	ctx = multitenancy.WithOrgID(ctx, "1two")
-	ctx = memory.WithConversationID(ctx, fmt.Sprintf("llms-%d", time.Now().UnixNano()))
+// tool is a common interface for the three agent tools.
+type tool interface {
+	Name() string
+	Description() string
+	Execute(ctx context.Context, args string) (string, error)
+}
 
-	store := newPageStore(pages)
-
-	// Create LLM client based on provider
-	var llmClient interfaces.LLM
-	switch llmCfg.Provider {
-	case "anthropic":
-		llmClient = anthropicllm.NewClient(
-			llmCfg.APIKey,
-			anthropicllm.WithModel(llmCfg.Model),
-		)
-	default: // "openai" — works with any OpenAI-compatible API (Kimi K2, OpenAI, etc.)
-		opts := []openaillm.Option{
-			openaillm.WithModel(llmCfg.Model),
+// executeTool dispatches a tool call by name and returns the string result.
+func executeTool(ctx context.Context, tools []tool, name, args string) string {
+	for _, t := range tools {
+		if t.Name() == name {
+			result, err := t.Execute(ctx, args)
+			if err != nil {
+				return fmt.Sprintf("error: %v", err)
+			}
+			return result
 		}
-		if llmCfg.BaseURL != "" {
-			opts = append(opts, openaillm.WithBaseURL(llmCfg.BaseURL))
-		}
-		llmClient = openaillm.NewClient(llmCfg.APIKey, opts...)
 	}
+	return fmt.Sprintf("unknown tool: %s", name)
+}
 
-	// Create the agent with tools
-	a, err := agent.NewAgent(
-		agent.WithLLM(llmClient),
-		agent.WithMemory(memory.NewConversationBuffer()),
-		agent.WithSystemPrompt(systemPrompt),
-		agent.WithName("llms-txt-generator"),
-		agent.WithTools(
-			&listPagesTool{store: store},
-			&readPageTool{store: store},
-			&writeLlmsTxtTool{store: store},
-		),
-		agent.WithMaxIterations(15),
-		agent.WithRequirePlanApproval(false),
-	)
-	if err != nil {
-		return "", TokenUsage{}, fmt.Errorf("agent: create agent: %w", err)
-	}
-
-	// Build the input prompt based on source type
-	var input string
+// buildInputPrompt returns the initial user message based on source type.
+func buildInputPrompt(detailLevel, sourceType string, pageCount int) string {
 	if sourceType == "github" {
-		input = fmt.Sprintf(
+		return fmt.Sprintf(
 			"Generate an llms.txt file for this GitHub repository. Detail level: %s. "+
 				"There are %d files available from the repo. "+
 				"Start by listing all files to understand the project structure, "+
 				"then read the README and key documentation files, "+
 				"then read important source files to understand the architecture, "+
 				"and finally call write_llms_txt with the complete output.",
-			detailLevel, len(pages),
-		)
-	} else {
-		input = fmt.Sprintf(
-			"Generate an llms.txt file for this website. Detail level: %s. "+
-				"There are %d crawled pages available. "+
-				"Start by listing all pages, then read the important ones, "+
-				"and finally call write_llms_txt with the complete output.",
-			detailLevel, len(pages),
+			detailLevel, pageCount,
 		)
 	}
+	return fmt.Sprintf(
+		"Generate an llms.txt file for this website. Detail level: %s. "+
+			"There are %d crawled pages available. "+
+			"Start by listing all pages, then read the important ones, "+
+			"and finally call write_llms_txt with the complete output.",
+		detailLevel, pageCount,
+	)
+}
 
-	// Run the agent with detailed response for token tracking
-	resp, err := a.RunDetailed(ctx, input)
+// --- OpenAI-compatible agent loop ---
+
+// openaiToolDefs returns the tool definitions for the OpenAI chat completions API.
+func openaiToolDefs(tools []tool) []openai.ChatCompletionToolUnionParam {
+	defs := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+	for _, t := range tools {
+		var schema openai.FunctionParameters
+		switch t.Name() {
+		case "list_pages":
+			schema = openai.FunctionParameters{
+				"type":       "object",
+				"properties": map[string]any{},
+			}
+		case "read_page":
+			schema = openai.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"url": map[string]any{
+						"type":        "string",
+						"description": "The URL of the page to read",
+					},
+				},
+				"required": []string{"url"},
+			}
+		case "write_llms_txt":
+			schema = openai.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"content": map[string]any{
+						"type":        "string",
+						"description": "The complete llms.txt file content",
+					},
+				},
+				"required": []string{"content"},
+			}
+		}
+
+		fn := openai.FunctionDefinitionParam{
+			Name:        t.Name(),
+			Description: openai.String(t.Description()),
+			Parameters:  schema,
+		}
+		defs = append(defs, openai.ChatCompletionFunctionTool(fn))
+	}
+	return defs
+}
+
+func runOpenAILoop(ctx context.Context, cfg LLMConfig, tools []tool, inputPrompt string) (TokenUsage, error) {
+	client := openai.NewClient(
+		openaioption.WithAPIKey(cfg.APIKey),
+		openaioption.WithBaseURL(cfg.BaseURL),
+	)
+
+	toolDefs := openaiToolDefs(tools)
+	messages := []openai.ChatCompletionMessageParamUnion{
+		openai.SystemMessage(systemPrompt),
+		openai.UserMessage(inputPrompt),
+	}
+
+	var totalUsage TokenUsage
+	const maxIterations = 15
+
+	for i := 0; i < maxIterations; i++ {
+		resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+			Model:       cfg.Model,
+			Messages:    messages,
+			Tools:       toolDefs,
+			Temperature: param.NewOpt(0.7),
+		})
+		if err != nil {
+			return totalUsage, fmt.Errorf("openai call: %w", err)
+		}
+
+		totalUsage.InputTokens += int(resp.Usage.PromptTokens)
+		totalUsage.OutputTokens += int(resp.Usage.CompletionTokens)
+
+		if len(resp.Choices) == 0 {
+			break
+		}
+
+		choice := resp.Choices[0]
+		toolCalls := choice.Message.ToolCalls
+
+		log.Printf("agent: iteration %d — %d tool calls, %d tokens so far (in=%d out=%d)",
+			i+1, len(toolCalls),
+			totalUsage.InputTokens+totalUsage.OutputTokens,
+			totalUsage.InputTokens, totalUsage.OutputTokens,
+		)
+
+		if len(toolCalls) == 0 {
+			// No tool calls — the model is done.
+			break
+		}
+
+		// Append the assistant message (with its tool calls) to the conversation.
+		assistantParam := openai.ChatCompletionAssistantMessageParam{}
+		for _, tc := range toolCalls {
+			assistantParam.ToolCalls = append(assistantParam.ToolCalls, tc.ToParam())
+		}
+		messages = append(messages, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistantParam})
+
+		// Execute each tool and append its result.
+		for _, tc := range toolCalls {
+			name := tc.Function.Name
+			args := tc.Function.Arguments
+			result := executeTool(ctx, tools, name, args)
+			log.Printf("agent: tool %q → %d bytes result", name, len(result))
+			messages = append(messages, openai.ToolMessage(result, tc.ID))
+		}
+	}
+
+	return totalUsage, nil
+}
+
+// --- Anthropic agent loop ---
+
+// anthropicToolDefs returns the tool definitions for the Anthropic Messages API.
+func anthropicToolDefs(tools []tool) []anthropic.ToolUnionParam {
+	defs := make([]anthropic.ToolUnionParam, 0, len(tools))
+	for _, t := range tools {
+		var schema anthropic.ToolInputSchemaParam
+		switch t.Name() {
+		case "list_pages":
+			schema = anthropic.ToolInputSchemaParam{
+				Properties: map[string]any{},
+			}
+		case "read_page":
+			schema = anthropic.ToolInputSchemaParam{
+				Properties: map[string]any{
+					"url": map[string]any{
+						"type":        "string",
+						"description": "The URL of the page to read",
+					},
+				},
+				Required: []string{"url"},
+			}
+		case "write_llms_txt":
+			schema = anthropic.ToolInputSchemaParam{
+				Properties: map[string]any{
+					"content": map[string]any{
+						"type":        "string",
+						"description": "The complete llms.txt file content",
+					},
+				},
+				Required: []string{"content"},
+			}
+		}
+
+		toolParam := anthropic.ToolParam{
+			Name:        t.Name(),
+			Description: anthropic.String(t.Description()),
+			InputSchema: schema,
+		}
+		defs = append(defs, anthropic.ToolUnionParam{OfTool: &toolParam})
+	}
+	return defs
+}
+
+func runAnthropicLoop(ctx context.Context, cfg LLMConfig, tools []tool, inputPrompt string) (TokenUsage, error) {
+	client := anthropic.NewClient(
+		anthropicoption.WithAPIKey(cfg.APIKey),
+	)
+
+	toolDefs := anthropicToolDefs(tools)
+	messages := []anthropic.MessageParam{
+		anthropic.NewUserMessage(anthropic.NewTextBlock(inputPrompt)),
+	}
+
+	var totalUsage TokenUsage
+	const maxIterations = 15
+
+	for i := 0; i < maxIterations; i++ {
+		resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+			Model:     anthropic.Model(cfg.Model),
+			MaxTokens: 4096,
+			Messages:  messages,
+			Tools:     toolDefs,
+			System: []anthropic.TextBlockParam{
+				{Text: systemPrompt},
+			},
+		})
+		if err != nil {
+			return totalUsage, fmt.Errorf("anthropic call: %w", err)
+		}
+
+		totalUsage.InputTokens += int(resp.Usage.InputTokens)
+		totalUsage.OutputTokens += int(resp.Usage.OutputTokens)
+
+		// Collect tool_use blocks from the response.
+		var toolUseBlocks []anthropic.ContentBlockUnion
+		for _, block := range resp.Content {
+			if block.Type == "tool_use" {
+				toolUseBlocks = append(toolUseBlocks, block)
+			}
+		}
+
+		log.Printf("agent: iteration %d — %d tool calls, %d tokens so far (in=%d out=%d)",
+			i+1, len(toolUseBlocks),
+			totalUsage.InputTokens+totalUsage.OutputTokens,
+			totalUsage.InputTokens, totalUsage.OutputTokens,
+		)
+
+		if resp.StopReason != anthropic.StopReasonToolUse || len(toolUseBlocks) == 0 {
+			// Not a tool call turn — the model is done.
+			break
+		}
+
+		// Append the assistant message (containing its response content) to the conversation.
+		assistantContentBlocks := make([]anthropic.ContentBlockParamUnion, 0, len(resp.Content))
+		for _, block := range resp.Content {
+			if block.Type == "text" {
+				assistantContentBlocks = append(assistantContentBlocks,
+					anthropic.NewTextBlock(block.Text))
+			} else if block.Type == "tool_use" {
+				assistantContentBlocks = append(assistantContentBlocks,
+					anthropic.NewToolUseBlock(block.ID, block.Input, block.Name))
+			}
+		}
+		messages = append(messages, anthropic.NewAssistantMessage(assistantContentBlocks...))
+
+		// Execute each tool_use block and collect results into a single user message.
+		toolResultBlocks := make([]anthropic.ContentBlockParamUnion, 0, len(toolUseBlocks))
+		for _, block := range toolUseBlocks {
+			args := string(block.Input)
+			result := executeTool(ctx, tools, block.Name, args)
+			log.Printf("agent: tool %q → %d bytes result", block.Name, len(result))
+			toolResultBlocks = append(toolResultBlocks,
+				anthropic.NewToolResultBlock(block.ID, result, false))
+		}
+		messages = append(messages, anthropic.NewUserMessage(toolResultBlocks...))
+	}
+
+	return totalUsage, nil
+}
+
+// GenerateLlmsTxt creates an AI agent that analyzes crawled pages and produces
+// a structured llms.txt file. The agent uses tools to inspect pages selectively
+// rather than dumping everything into context.
+//
+// sourceType should be "github" for cloned repos, or "website" for crawled sites.
+func GenerateLlmsTxt(ctx context.Context, llmCfg LLMConfig, pages []crawl.CrawlPage, detailLevel string, sourceType string) (string, TokenUsage, error) {
+	store := newPageStore(pages)
+
+	tools := []tool{
+		&listPagesTool{store: store},
+		&readPageTool{store: store},
+		&writeLlmsTxtTool{store: store},
+	}
+
+	inputPrompt := buildInputPrompt(detailLevel, sourceType, len(pages))
+
+	var usage TokenUsage
+	var err error
+
+	switch llmCfg.Provider {
+	case "anthropic":
+		usage, err = runAnthropicLoop(ctx, llmCfg, tools, inputPrompt)
+	default: // "openai" — works with any OpenAI-compatible API (Kimi K2, OpenAI, etc.)
+		usage, err = runOpenAILoop(ctx, llmCfg, tools, inputPrompt)
+	}
 	if err != nil {
-		return "", TokenUsage{}, fmt.Errorf("agent: run: %w", err)
+		return "", TokenUsage{}, err
 	}
 
-	// Extract the result from the write_llms_txt tool
 	store.mu.Lock()
 	result := store.result
 	store.mu.Unlock()
 
-	// If the agent didn't call write_llms_txt, fall back to its text output
 	if result == "" {
-		result = resp.Content
-	}
-
-	usage := TokenUsage{}
-	if resp.Usage != nil && (resp.Usage.InputTokens > 0 || resp.Usage.OutputTokens > 0) {
-		usage.InputTokens = resp.Usage.InputTokens
-		usage.OutputTokens = resp.Usage.OutputTokens
-	} else {
-		// The agent SDK may not aggregate token usage across multi-turn tool calls.
-		// Estimate based on content size (~4 chars per token) to ensure billing works.
-		totalChars := len(input) + len(result)
-		for _, p := range pages {
-			totalChars += len(p.Markdown) + len(p.Title)
-		}
-		// Conservative estimate: input tokens ≈ total chars / 4, output ≈ result / 4
-		usage.InputTokens = (totalChars - len(result)) / 4
-		usage.OutputTokens = len(result) / 4
-		if usage.InputTokens < 100 {
-			usage.InputTokens = 100
-		}
-		if usage.OutputTokens < 50 {
-			usage.OutputTokens = 50
-		}
+		return "", usage, fmt.Errorf("agent: write_llms_txt was never called — no output produced")
 	}
 
 	return result, usage, nil
