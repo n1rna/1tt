@@ -142,6 +142,7 @@ type subscriptionPayload struct {
 	Customer           struct {
 		ID         string `json:"id"`
 		ExternalID string `json:"external_id"`
+		Email      string `json:"email"`
 	} `json:"customer"`
 }
 
@@ -165,6 +166,14 @@ func handleSubscriptionEvent(ctx context.Context, db *sql.DB, cfg *config.Config
 		if polarCustID != "" {
 			db.QueryRowContext(ctx,
 				`SELECT user_id FROM billing_customers WHERE polar_customer_id = $1`, polarCustID).Scan(&userID)
+		}
+	}
+	// Last resort: look up user by customer email
+	if userID == "" && sub.Customer.Email != "" {
+		db.QueryRowContext(ctx,
+			`SELECT id FROM "user" WHERE email = $1 LIMIT 1`, sub.Customer.Email).Scan(&userID)
+		if userID != "" {
+			log.Printf("billing webhook: resolved user %s via email %s", userID, sub.Customer.Email)
 		}
 	}
 	if userID == "" {
