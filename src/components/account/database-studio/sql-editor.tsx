@@ -12,7 +12,8 @@ import { useTheme } from "next-themes";
 import { Play, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { CellValue, QueryExecutor, SqlDialect } from "./types";
+import type { CellValue, QueryExecutor, SqlDialect, TableSchema } from "./types";
+import { AiSqlBar } from "./ai-sql-bar";
 
 interface LocalQueryResult {
   columns?: string[];
@@ -26,6 +27,8 @@ interface LocalQueryResult {
 interface SqlEditorProps {
   queryExecutor: QueryExecutor;
   dialect?: SqlDialect;
+  schema?: TableSchema[];
+  aiEnabled?: boolean;
 }
 
 function ResultsView({ result }: { result: LocalQueryResult | null }) {
@@ -138,7 +141,7 @@ function ResultsView({ result }: { result: LocalQueryResult | null }) {
   );
 }
 
-export function SqlEditor({ queryExecutor, dialect = "postgres" }: SqlEditorProps) {
+export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabled = false }: SqlEditorProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const { resolvedTheme } = useTheme();
@@ -171,6 +174,14 @@ export function SqlEditor({ queryExecutor, dialect = "postgres" }: SqlEditorProp
       setLoading(false);
     }
   }, [queryExecutor, loading]);
+
+  const setEditorContent = useCallback((newSql: string) => {
+    const view = editorViewRef.current;
+    if (!view) return;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: newSql },
+    });
+  }, []);
 
   // Keep runQuery ref stable for keymap
   const runQueryRef = useRef(runQuery);
@@ -365,6 +376,16 @@ export function SqlEditor({ queryExecutor, dialect = "postgres" }: SqlEditorProp
           className="min-h-[150px] max-h-[40vh] overflow-auto"
         />
       </div>
+
+      {/* AI SQL bar */}
+      {schema && schema.length > 0 && (
+        <AiSqlBar
+          schema={schema}
+          dialect={dialect}
+          onSqlGenerated={setEditorContent}
+          aiEnabled={aiEnabled}
+        />
+      )}
 
       {/* Run button + meta */}
       <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/10 shrink-0">

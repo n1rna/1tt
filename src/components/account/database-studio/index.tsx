@@ -9,6 +9,7 @@ import { AuthGate } from "@/components/layout/auth-gate";
 import { ConnectionDialog } from "@/components/account/connection-dialog";
 import { getDatabaseSchema, queryDatabase } from "@/lib/databases";
 import { StudioShell } from "./studio-shell";
+import { useBillingStatus } from "@/lib/billing";
 import type { TableSchema } from "./types";
 
 function DatabaseStudioInner() {
@@ -19,6 +20,9 @@ function DatabaseStudioInner() {
   const [schema, setSchema] = useState<TableSchema[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(true);
   const [connOpen, setConnOpen] = useState(false);
+
+  const { data: billing } = useBillingStatus();
+  const aiEnabled = billing != null && billing.plan !== "free";
 
   // Load schema + db name
   useEffect(() => {
@@ -107,6 +111,7 @@ function DatabaseStudioInner() {
       schema={schema}
       schemaLoading={schemaLoading}
       sidebarHeader={sidebarHeader}
+      aiEnabled={aiEnabled}
     />
   );
 }

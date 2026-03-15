@@ -13,6 +13,7 @@ import {
   type HostedSqliteDB,
 } from "@/lib/hosted-sqlite";
 import { StudioShell } from "./database-studio/studio-shell";
+import { useBillingStatus } from "@/lib/billing";
 import type { TableSchema, QueryExecutor } from "./database-studio/types";
 import { ApiInfoDialog } from "./hosted-sqlite-api-dialog";
 
@@ -24,6 +25,9 @@ function HostedSqliteStudioInner() {
   const [schema, setSchema] = useState<TableSchema[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(true);
   const [apiOpen, setApiOpen] = useState(false);
+
+  const { data: billing } = useBillingStatus();
+  const aiEnabled = billing != null && billing.plan !== "free";
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +71,7 @@ function HostedSqliteStudioInner() {
   const sidebarHeader = (
     <div className="px-3 py-2.5 border-b space-y-1.5">
       <Link
-        href="/account/sqlite"
+        href="/account/databases"
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-3 w-3" />
@@ -107,6 +111,7 @@ function HostedSqliteStudioInner() {
         schema={schema}
         schemaLoading={schemaLoading}
         sidebarHeader={sidebarHeader}
+        aiEnabled={aiEnabled}
       />
     </>
   );

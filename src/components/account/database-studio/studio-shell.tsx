@@ -32,6 +32,7 @@ export interface StudioShellProps {
   schema: TableSchema[];
   schemaLoading: boolean;
   sidebarHeader: React.ReactNode;
+  aiEnabled?: boolean;
   className?: string;
 }
 
@@ -41,6 +42,7 @@ export function StudioShell({
   schema,
   schemaLoading,
   sidebarHeader,
+  aiEnabled = false,
   className,
 }: StudioShellProps) {
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -163,6 +165,8 @@ export function StudioShell({
               key={activeTab.id}
               queryExecutor={queryExecutor}
               dialect={dialect}
+              schema={schema}
+              aiEnabled={aiEnabled}
             />
           )}
         </div>

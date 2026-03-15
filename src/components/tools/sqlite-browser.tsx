@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/auth-client";
 import { SignInDialog } from "@/components/layout/sign-in-dialog";
 import { uploadSqliteDb } from "@/lib/hosted-sqlite";
+import { useBillingStatus } from "@/lib/billing";
 import type { Database as SqlJsDatabase } from "sql.js";
 import { StudioShell } from "@/components/account/database-studio/studio-shell";
 import type {
@@ -127,6 +128,10 @@ export function SqliteBrowser({ children }: { children?: React.ReactNode }) {
   const router = useRouter();
   const { data: session } = useSession();
   const isLoggedIn = !!session;
+
+  const { data: billing } = useBillingStatus();
+  // AI requires both a session and a paid plan
+  const aiEnabled = isLoggedIn && billing != null && billing.plan !== "free";
 
   const [db, setDb] = useState<SqlJsDatabase | null>(null);
   const [fileName, setFileName] = useState("");
@@ -356,6 +361,7 @@ export function SqliteBrowser({ children }: { children?: React.ReactNode }) {
         schema={schema}
         schemaLoading={false}
         sidebarHeader={sidebarHeader}
+        aiEnabled={aiEnabled}
         className="flex-1 min-h-0"
       />
 
