@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { GripHorizontal, Sparkles } from "lucide-react";
 import { useBillingStatus } from "@/lib/billing";
 import { AiQueryBar } from "@/components/account/database-studio/ai-query-bar";
 import type { TableSchema, AiSession } from "@/components/account/database-studio/types";
@@ -1212,71 +1213,90 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
   const total = results?.hits?.total?.value ?? 0;
   const columns = allColumns;
 
+  // Resizable editor + collapsible AI bar state
+  const [editorHeight, setEditorHeight] = useState(200);
+  const [aiBarOpen, setAiBarOpen] = useState(true);
+  const editorResizing = useRef(false);
+
+  const handleEditorResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    editorResizing.current = true;
+    const startY = e.clientY;
+    const startH = editorHeight;
+    const onMove = (ev: MouseEvent) => {
+      if (!editorResizing.current) return;
+      setEditorHeight(Math.max(80, Math.min(600, startH + (ev.clientY - startY))));
+    };
+    const onUp = () => {
+      editorResizing.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [editorHeight]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Editor area */}
-      <div className="border-b shrink-0">
-        {/* Controls row */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/10 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground">Index</label>
-            <select
-              className="rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-              value={selectedIndex}
-              onChange={(e) => setSelectedIndex(e.target.value)}
-            >
-              <option value="*">* (all indices)</option>
-              {indices.map((i) => (
-                <option key={i} value={i}>{i}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground">From</label>
-            <input
-              type="number"
-              min={0}
-              className="w-16 rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-              value={from}
-              onChange={(e) => setFrom(Number(e.target.value))}
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs text-muted-foreground">Size</label>
-            <input
-              type="number"
-              min={1}
-              max={10000}
-              className="w-16 rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-            />
-          </div>
+      {/* Controls row */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/10 shrink-0 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground">Index</label>
+          <select
+            className="rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            value={selectedIndex}
+            onChange={(e) => setSelectedIndex(e.target.value)}
+          >
+            <option value="*">* (all indices)</option>
+            {indices.map((i) => (
+              <option key={i} value={i}>{i}</option>
+            ))}
+          </select>
         </div>
-        {/* CodeMirror editor */}
-        <div className="min-h-[150px] max-h-[40vh] overflow-auto">
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground">From</label>
+          <input
+            type="number"
+            min={0}
+            className="w-16 rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            value={from}
+            onChange={(e) => setFrom(Number(e.target.value))}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-muted-foreground">Size</label>
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            className="w-16 rounded-md border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            value={size}
+            onChange={(e) => setSize(Number(e.target.value))}
+          />
+        </div>
+      </div>
+
+      {/* Editor — resizable */}
+      <div
+        className="border-b overflow-hidden shrink-0"
+        style={{ height: `${editorHeight}px` }}
+      >
+        <div className="h-full overflow-auto">
           <JsonEditor value={query} onChange={setQuery} onRun={() => runQuery()} />
         </div>
       </div>
 
-      {/* AI bar — reuses the same component as database studio */}
-      <AiQueryBar
-        schema={esSchema}
-        dialect="elasticsearch"
-        onSqlGenerated={(json) => setQuery(json)}
-        aiEnabled={aiEnabled}
-        aiSession={aiSession}
-        onAiSessionChange={setAiSession}
-        getEditorContent={() => query}
-        lastQuerySummary={
-          results
-            ? `${results.hits?.total?.value ?? 0} hits in ${results.took ?? 0}ms`
-            : undefined
-        }
-      />
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleEditorResize}
+        className="h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors flex items-center justify-center group"
+        title="Drag to resize editor"
+      >
+        <GripHorizontal className="h-2.5 w-2.5 text-muted-foreground/30 group-hover:text-muted-foreground/60" />
+      </div>
 
       {/* Run bar */}
-      <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/10 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10 shrink-0">
         <Button
           size="sm"
           className="h-7 gap-1.5 text-xs"
@@ -1290,13 +1310,15 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
           )}
           {loading ? "Running…" : "Run Query"}
         </Button>
-        <span className="text-xs text-muted-foreground">Ctrl/Cmd+Enter to run</span>
+        <span className="text-xs text-muted-foreground">
+          {typeof navigator !== "undefined" && navigator.platform?.includes("Mac") ? "⌘" : "Ctrl"}+Enter
+        </span>
         <div className="flex-1" />
         {results?.took != null && (
-          <span className="text-xs text-muted-foreground">{results.took}ms</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{results.took}ms</span>
         )}
         {hits.length > 0 && (
-          <span className="text-xs text-muted-foreground">{total.toLocaleString()} hits</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} hits</span>
         )}
         <div className="flex items-center gap-2">
           {results && (
@@ -1326,6 +1348,55 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
           )}
+        </div>
+      </div>
+
+      {/* AI Assistant header — collapsible toggle */}
+      <button
+        onClick={() => setAiBarOpen((v) => !v)}
+        className={cn(
+          "flex items-center gap-2 w-full px-3 py-1.5 border-b shrink-0 text-left transition-colors",
+          aiBarOpen ? "bg-primary/5 hover:bg-primary/10" : "bg-muted/10 hover:bg-muted/20"
+        )}
+      >
+        <Sparkles className={cn("h-3 w-3 shrink-0", aiBarOpen ? "text-primary" : "text-muted-foreground/50")} />
+        <span className={cn("text-xs font-medium", aiBarOpen ? "text-primary" : "text-muted-foreground/50")}>
+          AI Assistant
+        </span>
+        {aiSession && aiSession.entries.length > 0 && (
+          <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+            {aiSession.entries.length} {aiSession.entries.length === 1 ? "prompt" : "prompts"}
+          </span>
+        )}
+        <div className="flex-1" />
+        <ChevronDown
+          className={cn(
+            "h-3 w-3 shrink-0 transition-transform duration-200",
+            aiBarOpen ? "text-primary/60 rotate-180" : "text-muted-foreground/40"
+          )}
+        />
+      </button>
+
+      {/* AI bar — collapsible */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-in-out shrink-0"
+        style={{ gridTemplateRows: aiBarOpen ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <AiQueryBar
+            schema={esSchema}
+            dialect="elasticsearch"
+            onSqlGenerated={(json) => setQuery(json)}
+            aiEnabled={aiEnabled}
+            aiSession={aiSession}
+            onAiSessionChange={setAiSession}
+            getEditorContent={() => query}
+            lastQuerySummary={
+              results
+                ? `${results.hits?.total?.value ?? 0} hits in ${results.took ?? 0}ms`
+                : undefined
+            }
+          />
         </div>
       </div>
 
