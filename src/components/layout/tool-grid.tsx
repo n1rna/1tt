@@ -30,7 +30,7 @@ import {
 import { useSyncedState } from "@/lib/sync";
 import { SyncToggle } from "@/components/ui/sync-toggle";
 
-const FEATURED_SLUGS = ["json", "jwt", "color", "random", "cron", "logo", "og", "sqlite"];
+const FEATURED_SLUGS = ["elasticsearch", "config", "llms-txt", "color", "cron", "logo", "og", "sqlite"];
 
 // Category display order for "All Tools" section
 const CATEGORY_ORDER: ToolCategory[] = [
