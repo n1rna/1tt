@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { Sparkles, Loader2, ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { generateAiSql, getAiSqlSuggestions } from "@/lib/ai-sql";
@@ -117,6 +117,7 @@ export function AiSqlBar({ schema, dialect, onSqlGenerated, aiEnabled }: AiSqlBa
     [onSqlGenerated]
   );
 
+  const [chipsExpanded, setChipsExpanded] = useState(false);
   const showSuggestions = aiEnabled && (suggestionsLoading || suggestions.length > 0);
 
   return (
@@ -189,21 +190,41 @@ export function AiSqlBar({ schema, dialect, onSqlGenerated, aiEnabled }: AiSqlBa
           {suggestionsLoading ? (
             <SuggestionSkeletons />
           ) : (
-            <div
-              className={cn(
-                "flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5",
-                "animate-in fade-in duration-300"
-              )}
-            >
-              {suggestions.map((chip, i) => (
+            <div className="animate-in fade-in duration-300">
+              <div
+                className={cn(
+                  "flex gap-1.5 pb-0.5",
+                  chipsExpanded ? "flex-wrap" : "overflow-hidden max-h-7"
+                )}
+              >
+                {suggestions.map((chip, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleChipClick(chip)}
+                    className="shrink-0 bg-muted/50 hover:bg-muted text-xs rounded-full px-3 py-1 text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+              {suggestions.length > 3 && (
                 <button
-                  key={i}
-                  onClick={() => handleChipClick(chip)}
-                  className="shrink-0 bg-muted/50 hover:bg-muted text-xs rounded-full px-3 py-1 text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                  onClick={() => setChipsExpanded((v) => !v)}
+                  className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                 >
-                  {chip.label}
+                  {chipsExpanded ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Show more
+                    </>
+                  )}
                 </button>
-              ))}
+              )}
             </div>
           )}
         </div>
