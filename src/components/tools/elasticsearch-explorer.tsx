@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useBillingStatus } from "@/lib/billing";
-import { AiSqlBar } from "@/components/account/database-studio/ai-sql-bar";
+import { AiQueryBar } from "@/components/account/database-studio/ai-query-bar";
 import type { TableSchema, AiSession } from "@/components/account/database-studio/types";
 import {
   Database,
@@ -1091,13 +1091,13 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "raw">("table");
   const [copied, setCopied] = useState(false);
-  const [allColumns, setAllColumns] = useState<string[]>([]);
+  const [allColumns, setAllColumns] = useState<{ name: string; type: string }[]>([]);
 
   const { data: billing } = useBillingStatus();
   const aiEnabled = billing != null && (billing.plan === "pro" || billing.plan === "max");
   const [aiSession, setAiSession] = useState<AiSession | undefined>();
 
-  // Build a fake TableSchema from mapping fields so AiSqlBar can work with it
+  // Build a TableSchema from mapping fields so AiQueryBar can work with it
   const esSchema = useMemo<TableSchema[]>(() => {
     if (allColumns.length === 0) return [];
     return [{
@@ -1105,8 +1105,8 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
       name: selectedIndex || "*",
       type: "index",
       columns: allColumns.map(f => ({
-        name: f,
-        type: "",
+        name: f.name,
+        type: f.type,
         nullable: true,
         default: null,
         isPrimary: false,
@@ -1126,19 +1126,21 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
       .catch(() => {});
   }, [conn]);
 
-  const extractMappingFields = useCallback((mappingData: Record<string, unknown>): string[] => {
-    const fields: string[] = [];
+  const extractMappingFields = useCallback((mappingData: Record<string, unknown>): { name: string; type: string }[] => {
+    const seen = new Map<string, string>();
     for (const idx of Object.values(mappingData)) {
       const idxObj = idx as Record<string, unknown>;
       const mappings = idxObj?.mappings as Record<string, unknown> | undefined;
-      const props = mappings?.properties as Record<string, unknown> | undefined;
+      const props = mappings?.properties as Record<string, { type?: string }> | undefined;
       if (props) {
-        for (const key of Object.keys(props)) {
-          if (!fields.includes(key)) fields.push(key);
+        for (const [key, val] of Object.entries(props)) {
+          if (!seen.has(key)) seen.set(key, val?.type ?? "");
         }
       }
     }
-    return fields.sort();
+    return Array.from(seen.entries())
+      .map(([name, type]) => ({ name, type }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, []);
 
   const runQuery = useCallback(async (opts?: { isPageChange?: boolean }) => {
@@ -1177,11 +1179,11 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
       if (hits.length > 0) {
         const newKeys = Array.from(new Set(hits.flatMap((h) => Object.keys(h._source))));
         setAllColumns((prev) => {
-          const merged = [...prev];
-          for (const k of newKeys) {
-            if (!merged.includes(k)) merged.push(k);
-          }
-          return merged.length !== prev.length ? merged : prev;
+          const existingNames = new Set(prev.map((c) => c.name));
+          const added = newKeys
+            .filter((k) => !existingNames.has(k))
+            .map((k) => ({ name: k, type: "" }));
+          return added.length > 0 ? [...prev, ...added] : prev;
         });
       }
     } catch (e) {
@@ -1258,7 +1260,7 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
       </div>
 
       {/* AI bar — reuses the same component as database studio */}
-      <AiSqlBar
+      <AiQueryBar
         schema={esSchema}
         dialect="elasticsearch"
         onSqlGenerated={(json) => setQuery(json)}
@@ -1352,8 +1354,8 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
                     <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap border-r border-border/30">_index</th>
                     <th className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap border-r border-border/30">_score</th>
                     {columns.map((col) => (
-                      <th key={col} className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap border-r border-border/30">
-                        {col}
+                      <th key={col.name} className="px-3 py-2 text-left font-medium text-foreground whitespace-nowrap border-r border-border/30">
+                        {col.name}
                       </th>
                     ))}
                   </tr>
@@ -1379,7 +1381,7 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
                         )}
                       </td>
                       {columns.map((col) => {
-                        const val = hit._source[col];
+                        const val = hit._source[col.name];
                         const isNull = val === null || val === undefined;
                         const display = isNull
                           ? ""
@@ -1388,7 +1390,7 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
                           : String(val);
                         return (
                           <td
-                            key={col}
+                            key={col.name}
                             className="px-3 py-1.5 border-r border-border/20 whitespace-nowrap max-w-xs"
                             title={display}
                           >

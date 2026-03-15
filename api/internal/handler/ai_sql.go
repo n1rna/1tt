@@ -143,13 +143,16 @@ func buildSystemPrompt(dialect string, tables []aiSqlTable) string {
 	if dialect == "elasticsearch" {
 		// Mappings are injected by the frontend as a system message in
 		// conversation mode.  This single-turn path is a fallback.
-		return `You are an Elasticsearch expert. Generate a valid Elasticsearch query body (JSON) based on the user's request.
+		return `You are an Elasticsearch expert. Generate a valid Elasticsearch query body as JSON.
 
 Rules:
-- Output ONLY valid JSON — the complete request body for _search
-- No markdown formatting, no code fences, no explanations
-- Include "size": 10 unless the user specifies otherwise
-- Use the appropriate query types: match, term, range, bool, etc.`
+- Output ONLY valid JSON — the complete request body for the _search endpoint
+- No markdown, no code fences, no explanations outside the JSON
+- Include "size": 10 unless specified otherwise
+- For text fields, use "match" queries; for keyword fields use "term"
+- For date fields, use "range" with relative dates like "now-7d"
+- For aggregations, set "size": 0 to skip hits
+- Common patterns: bool queries for combining, nested for nested objects`
 	}
 
 	schemaTxt := formatSchema(tables)
@@ -171,7 +174,7 @@ Rules:
 // followed by a fenced code block.
 func conversationSystemSuffix(dialect string) string {
 	if dialect == "elasticsearch" {
-		return "\n\nAfter your reasoning, output the Elasticsearch JSON query body on a new line starting with ```json and ending with ```. Your reasoning should be brief (1-2 sentences max)."
+		return "\n\nBriefly explain your approach in 1-2 sentences, then output the complete Elasticsearch query body in a fenced code block: ```json ... ```. The JSON must be the full _search request body."
 	}
 	return "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
 }

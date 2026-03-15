@@ -13,7 +13,7 @@ import { Play, Loader2, AlertTriangle, CheckCircle2, Sparkles, GripHorizontal, C
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CellValue, QueryExecutor, SqlDialect, TableSchema, AiSession } from "./types";
-import { AiSqlBar } from "./ai-sql-bar";
+import { AiQueryBar } from "./ai-query-bar";
 
 interface LocalQueryResult {
   columns?: string[];
@@ -674,7 +674,7 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
         style={{ gridTemplateRows: aiBarOpen ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <AiSqlBar
+          <AiQueryBar
             schema={schema ?? []}
             dialect={dialect}
             onSqlGenerated={setEditorContent}

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Sparkles, ArrowRight, ChevronDown, ChevronUp, Brain, AlertCircle, Check, Loader2, Circle } from "lucide-react";
+import { Sparkles, ArrowRight, ChevronDown, ChevronUp, Brain, AlertCircle, Check, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-  generateAiSqlChat,
-  buildSchemaSystemMessage,
-  getAiSqlSuggestions,
-} from "@/lib/ai-sql";
-import type { SqlSuggestion } from "@/lib/ai-sql";
+  generateAiChat,
+  buildSystemMessage,
+  getAiSuggestions,
+} from "@/lib/ai-query";
+import type { QuerySuggestion } from "@/lib/ai-query";
 import type { TableSchema, SqlDialect, AiSession, AiSessionEntry } from "./types";
 
 // ─── Shimmer CSS (inlined to avoid coupling with llms-txt-generator) ──────────
@@ -43,7 +43,7 @@ const SHIMMER_CSS = `
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface AiSqlBarProps {
+interface AiQueryBarProps {
   schema: TableSchema[];
   dialect: SqlDialect;
   onSqlGenerated: (sql: string) => void;
@@ -56,9 +56,9 @@ interface AiSqlBarProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function extractSqlFromResponse(text: string): { sql: string; reasoning: string } {
-  // Try to extract fenced ```sql block
-  const match = text.match(/```sql\s*([\s\S]*?)```/i);
+function extractQueryFromResponse(text: string): { sql: string; reasoning: string } {
+  // Try fenced ```sql or ```json block
+  const match = text.match(/```(?:sql|json)\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/);
   const sql = match ? match[1].trim() : text.trim();
 
   // Reasoning is everything before the code block
@@ -67,11 +67,6 @@ function extractSqlFromResponse(text: string): { sql: string; reasoning: string 
     : "";
 
   return { sql, reasoning };
-}
-
-function truncateSql(sql: string, maxLen = 60): string {
-  const single = sql.replace(/\s+/g, " ").trim();
-  return single.length > maxLen ? single.slice(0, maxLen) + "…" : single;
 }
 
 function newEntry(userPrompt: string): AiSessionEntry {
@@ -193,7 +188,7 @@ function TimelineEntry({
                     </p>
                   </div>
                 )}
-                {/* SQL */}
+                {/* Query result */}
                 {entry.sql && (
                   <div className="rounded bg-muted/30 px-2 py-1">
                     <code className="text-[10px] font-mono text-muted-foreground/70 break-all whitespace-pre-wrap">
@@ -226,9 +221,9 @@ function SuggestionSkeletons() {
   );
 }
 
-// ─── AiSqlBar ─────────────────────────────────────────────────────────────────
+// ─── AiQueryBar ───────────────────────────────────────────────────────────────
 
-export function AiSqlBar({
+export function AiQueryBar({
   schema,
   dialect,
   onSqlGenerated,
@@ -237,10 +232,10 @@ export function AiSqlBar({
   onAiSessionChange,
   getEditorContent,
   lastQuerySummary,
-}: AiSqlBarProps) {
+}: AiQueryBarProps) {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<SqlSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<QuerySuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [chipsExpanded, setChipsExpanded] = useState(false);
@@ -255,7 +250,7 @@ export function AiSqlBar({
     if (!aiEnabled || schema.length === 0 || suggestionsLoaded) return;
     let cancelled = false;
     setSuggestionsLoading(true);
-    getAiSqlSuggestions(schema, dialect)
+    getAiSuggestions(schema, dialect)
       .then((result) => {
         if (cancelled) return;
         setSuggestions(result);
@@ -283,6 +278,7 @@ export function AiSqlBar({
     },
     [aiSession, onAiSessionChange]
   );
+  void updateSession; // suppress unused-variable lint
 
   const handleGenerate = useCallback(async () => {
     const trimmed = prompt.trim();
@@ -299,7 +295,7 @@ export function AiSqlBar({
 
     // Inject schema as system message once
     if (!current.schemaInjected && schema.length > 0) {
-      const sysMsg = { role: "system" as const, content: buildSchemaSystemMessage(schema, dialect) };
+      const sysMsg = { role: "system" as const, content: buildSystemMessage(schema, dialect) };
       messages.unshift(sysMsg);
       current = { ...current, messages, schemaInjected: true };
     }
@@ -309,7 +305,7 @@ export function AiSqlBar({
     if (editorContent?.trim()) {
       messages.push({
         role: "user",
-        content: `Current SQL in editor:\n${editorContent}`,
+        content: `Current query in editor:\n${editorContent}`,
       });
       // Immediately followed by assistant ack to keep context coherent
       messages.push({ role: "assistant", content: "Noted." });
@@ -338,7 +334,7 @@ export function AiSqlBar({
     onAiSessionChange?.(sessionWithEntry);
 
     // Call API
-    const result = await generateAiSqlChat(messages, dialect);
+    const result = await generateAiChat(messages, dialect);
 
     if (result.error) {
       onAiSessionChange?.({
@@ -353,9 +349,9 @@ export function AiSqlBar({
       return;
     }
 
-    // Parse reasoning + SQL from response
+    // Parse reasoning + query from response
     const raw = result.sql ?? "";
-    const { sql, reasoning } = extractSqlFromResponse(raw);
+    const { sql, reasoning } = extractQueryFromResponse(raw);
 
     // Add assistant message to history
     const assistantMsg = { role: "assistant" as const, content: raw };
@@ -397,7 +393,7 @@ export function AiSqlBar({
   );
 
   const handleChipClick = useCallback(
-    (chip: SqlSuggestion) => {
+    (chip: QuerySuggestion) => {
       onSqlGenerated(chip.sql);
     },
     [onSqlGenerated]
@@ -436,7 +432,7 @@ export function AiSqlBar({
             {/* Older entries (collapsed by default) */}
             {historyExpanded && olderEntries.length > 0 && (
               <div className="max-h-32 overflow-y-auto">
-                {olderEntries.map((entry, i) => (
+                {olderEntries.map((entry) => (
                   <TimelineEntry
                     key={entry.id}
                     entry={entry}
@@ -489,7 +485,7 @@ export function AiSqlBar({
                 ? hasEntries
                   ? "Follow up or ask something new…"
                   : "Describe what you need in plain English…"
-                : "AI SQL generation requires a Pro plan"
+                : "AI query generation requires a Pro plan"
             }
             className={cn(
               "flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50",
@@ -507,7 +503,7 @@ export function AiSqlBar({
                 "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                 (loading || !prompt.trim()) && "opacity-40 cursor-not-allowed pointer-events-none"
               )}
-              title="Generate SQL (Enter)"
+              title="Generate query (Enter)"
             >
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
