@@ -761,7 +761,7 @@ export function LlmsTxtGenerator() {
                     )}
                   >
                     {opt.rec && (
-                      <span className="absolute -top-2 left-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
+                      <span className="absolute -top-2 right-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
                         recommended
                       </span>
                     )}
