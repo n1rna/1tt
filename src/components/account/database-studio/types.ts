@@ -73,7 +73,7 @@ export interface StatementResult {
 
 export type QueryExecutor = (sql: string) => Promise<QueryResult>;
 
-export type SqlDialect = "postgres" | "sqlite";
+export type SqlDialect = "postgres" | "sqlite" | "elasticsearch";
 
 export interface AiMessage {
   role: "system" | "user" | "assistant";

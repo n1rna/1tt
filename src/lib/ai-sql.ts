@@ -54,6 +54,30 @@ export async function generateAiSqlChat(
 }
 
 export function buildSchemaSystemMessage(schema: TableSchema[], dialect: SqlDialect): string {
+  if (dialect === "elasticsearch") {
+    // For ES, schema represents index fields — columns are field names, table name is the index
+    const fields = schema.flatMap(t =>
+      t.columns.map(c => `  ${c.name}${c.type ? ` (${c.type})` : ""}`)
+    );
+    const indexName = schema[0]?.name ?? "*";
+    const fieldList = fields.length > 0 ? fields.join("\n") : "  (no fields known)";
+
+    return `You are an Elasticsearch expert. Generate a valid Elasticsearch query body (JSON) based on the user's request.
+
+Index: ${indexName}
+Known fields:
+${fieldList}
+
+Rules:
+- First write a brief reasoning (1-2 sentences) explaining your approach
+- Then output the Elasticsearch JSON query body in a fenced code block: \`\`\`json ... \`\`\`
+- Output ONLY valid JSON inside the fence — the complete request body for _search
+- Use exact field names from the list above
+- Include "size": 10 unless the user specifies otherwise
+- Use the appropriate query types: match, term, range, bool, etc.
+- For follow-up requests, use conversation context to understand what the user wants modified`;
+  }
+
   const schemaText = schema.map(t => {
     const cols = t.columns.map(c => {
       let col = `  ${c.name} ${c.type}`;
@@ -82,11 +106,17 @@ export async function getAiSqlSuggestions(
   schema: TableSchema[],
   dialect: SqlDialect
 ): Promise<SqlSuggestion[]> {
+  // For ES, the backend expects {fields, dialect} instead of {schema, dialect}
+  const body =
+    dialect === "elasticsearch"
+      ? { fields: schema.flatMap((t) => t.columns.map((c) => c.name)), dialect }
+      : { schema, dialect };
+
   const res = await fetch("/api/proxy/ai/sql/suggestions", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ schema, dialect }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) return [];
   const data = await res.json() as { suggestions?: SqlSuggestion[] };

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useBillingStatus } from "@/lib/billing";
-import { EsAiBar } from "@/components/tools/es-ai-bar";
+import { AiSqlBar } from "@/components/account/database-studio/ai-sql-bar";
+import type { TableSchema, AiSession } from "@/components/account/database-studio/types";
 import {
   Database,
   Server,
@@ -1094,6 +1095,27 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
 
   const { data: billing } = useBillingStatus();
   const aiEnabled = billing != null && (billing.plan === "pro" || billing.plan === "max");
+  const [aiSession, setAiSession] = useState<AiSession | undefined>();
+
+  // Build a fake TableSchema from mapping fields so AiSqlBar can work with it
+  const esSchema = useMemo<TableSchema[]>(() => {
+    if (allColumns.length === 0) return [];
+    return [{
+      schema: "",
+      name: selectedIndex || "*",
+      type: "index",
+      columns: allColumns.map(f => ({
+        name: f,
+        type: "",
+        nullable: true,
+        default: null,
+        isPrimary: false,
+        isUnique: false,
+      })),
+      indexes: [],
+      rowEstimate: 0,
+    }];
+  }, [allColumns, selectedIndex]);
 
   useEffect(() => {
     esFetch(conn, "/_cat/indices?format=json&h=index")
@@ -1235,12 +1257,14 @@ function SearchTab({ conn, initialIndex }: { conn: EsConnection; initialIndex?: 
         </div>
       </div>
 
-      {/* AI bar */}
-      <EsAiBar
-        mappingFields={allColumns}
-        selectedIndex={selectedIndex}
-        onQueryGenerated={(json) => setQuery(json)}
+      {/* AI bar — reuses the same component as database studio */}
+      <AiSqlBar
+        schema={esSchema}
+        dialect="elasticsearch"
+        onSqlGenerated={(json) => setQuery(json)}
         aiEnabled={aiEnabled}
+        aiSession={aiSession}
+        onAiSessionChange={setAiSession}
         getEditorContent={() => query}
         lastQuerySummary={
           results

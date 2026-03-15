@@ -166,10 +166,15 @@ Rules:
 - Make reasonable assumptions for ambiguous requests`, dialect, schemaTxt, dialect)
 }
 
-// conversationSystemSuffix is appended to the frontend-provided system message
-// when using conversation mode, instructing the LLM to emit both reasoning and
-// a fenced SQL block so that parseAiResponse can split them cleanly.
-const conversationSystemSuffix = "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
+// conversationSystemSuffix returns the suffix appended to the frontend-provided
+// system message in conversation mode, instructing the LLM to emit reasoning
+// followed by a fenced code block.
+func conversationSystemSuffix(dialect string) string {
+	if dialect == "elasticsearch" {
+		return "\n\nAfter your reasoning, output the Elasticsearch JSON query body on a new line starting with ```json and ending with ```. Your reasoning should be brief (1-2 sentences max)."
+	}
+	return "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
+}
 
 // stripMarkdownFences removes optional ```sql ... ```, ```json ... ```, or
 // plain ``` ... ``` fences from LLM output.
@@ -371,9 +376,10 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			messages := make([]chatMessage, len(req.Messages))
 			copy(messages, req.Messages)
 
+			suffix := conversationSystemSuffix(req.Dialect)
 			for i, msg := range messages {
 				if msg.Role == "system" {
-					messages[i].Content = msg.Content + conversationSystemSuffix
+					messages[i].Content = msg.Content + suffix
 					break
 				}
 			}
