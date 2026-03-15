@@ -318,42 +318,106 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Skeleton for SSR / before mount ────────────────────────────────────────
+// ── Static featured card (no bookmark button, used for SSR / no-JS) ────────
 
-function SkeletonGrid() {
+function StaticFeaturedCard({ tool }: { tool: ToolDefinition }) {
+  const Icon = getIcon(tool.icon);
+
   return (
-    <div className="space-y-10">
-      <div>
-        <div className="h-4 w-24 rounded bg-muted mb-4" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tools.slice(0, 6).map((tool) => {
-            const Icon = getIcon(tool.icon);
-            return (
-              <Link key={tool.slug} href={`/tools/${tool.slug}`} className="block">
-                <div className="h-full rounded-xl border bg-card p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {categoryLabels[tool.category]}
-                    </Badge>
-                  </div>
-                  <h3 className="text-base font-semibold tracking-tight">{tool.name}</h3>
-                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                    {tool.description}
-                  </p>
-                </div>
-              </Link>
-            );
-          })}
+    <div className="relative group">
+      <Link href={`/tools/${tool.slug}`} className="block h-full">
+        <div className="relative h-full rounded-xl border bg-card p-5 transition-all duration-200 hover:border-foreground/25 hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/20">
+          <div className="flex items-start gap-4 mb-3">
+            <div className="relative shrink-0">
+              <div className="absolute inset-0 rounded-lg blur-md bg-primary/20 scale-125" aria-hidden />
+              <div className="relative p-2.5 rounded-lg bg-primary/10 ring-1 ring-primary/15">
+                <Icon className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <h3 className="text-base font-semibold tracking-tight">{tool.name}</h3>
+              <Badge variant="outline" className="text-xs font-medium mt-1">
+                {categoryLabels[tool.category]}
+              </Badge>
+            </div>
+            {tool.requiresAuth && (
+              <Icons.Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
+            {tool.description}
+          </p>
         </div>
-      </div>
+      </Link>
+    </div>
+  );
+}
+
+// ── Static compact row (no bookmark button, used for SSR / no-JS) ──────────
+
+function StaticCompactToolRow({
+  tool,
+  featured,
+}: {
+  tool: ToolDefinition;
+  featured: boolean;
+}) {
+  const Icon = getIcon(tool.icon);
+
+  return (
+    <div className="group">
+      <Link
+        href={`/tools/${tool.slug}`}
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 hover:bg-muted/60"
+      >
+        <div className="shrink-0 p-1.5 rounded-md bg-primary/8 text-primary">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium truncate">{tool.name}</span>
+            {featured && (
+              <Icons.Sparkles className="h-3 w-3 text-primary/60 shrink-0" />
+            )}
+            {tool.requiresAuth && (
+              <Icons.Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground truncate leading-relaxed">
+            {tool.description}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className="text-xs shrink-0 hidden sm:inline-flex font-normal text-muted-foreground"
+        >
+          {categoryLabels[tool.category]}
+        </Badge>
+      </Link>
     </div>
   );
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
+
+// ── Precomputed static data (used by both SSR and client) ────────────────────
+
+const staticFeaturedTools = FEATURED_SLUGS
+  .map((slug) => tools.find((t) => t.slug === slug))
+  .filter((t): t is ToolDefinition => t !== undefined);
+
+const featuredSlugsSet = new Set(FEATURED_SLUGS);
+
+const staticCategoryEntries: [ToolCategory, ToolDefinition[]][] = (() => {
+  const byCategory: Partial<Record<ToolCategory, ToolDefinition[]>> = {};
+  for (const tool of tools) {
+    if (!byCategory[tool.category]) byCategory[tool.category] = [];
+    byCategory[tool.category]!.push(tool);
+  }
+  return CATEGORY_ORDER
+    .map((cat) => [cat, byCategory[cat]] as [ToolCategory, ToolDefinition[] | undefined])
+    .filter(([, list]) => list && list.length > 0) as [ToolCategory, ToolDefinition[]][];
+})();
 
 export function ToolGrid() {
   const {
@@ -416,42 +480,27 @@ export function ToolGrid() {
     []
   );
 
-  if (!mounted) return <SkeletonGrid />;
-
   // ── Derive the three lists ──────────────────────────────────────────────
 
-  // 1. Bookmarked - in user-defined order
-  const bookmarkedTools = bookmarkOrder
-    .map((slug) => tools.find((t) => t.slug === slug))
-    .filter((t): t is ToolDefinition => t !== undefined);
+  // 1. Bookmarked - in user-defined order (only available after mount)
+  const bookmarkedTools = mounted
+    ? bookmarkOrder
+        .map((slug) => tools.find((t) => t.slug === slug))
+        .filter((t): t is ToolDefinition => t !== undefined)
+    : [];
 
-  const bookmarkedSlugs = new Set(bookmarkOrder);
+  const bookmarkedSlugs = new Set(mounted ? bookmarkOrder : []);
 
   // 2. Featured - hardcoded order, minus bookmarked
-  const featuredTools = FEATURED_SLUGS
-    .map((slug) => tools.find((t) => t.slug === slug))
-    .filter((t): t is ToolDefinition => t !== undefined && !bookmarkedSlugs.has(t.slug));
-
-  const featuredSlugsSet = new Set(FEATURED_SLUGS);
-
-  // 3. All tools grouped by category
-  const byCategory: Partial<Record<ToolCategory, ToolDefinition[]>> = {};
-  for (const tool of tools) {
-    if (!byCategory[tool.category]) byCategory[tool.category] = [];
-    byCategory[tool.category]!.push(tool);
-  }
-
-  const categoryEntries = CATEGORY_ORDER
-    .map((cat) => [cat, byCategory[cat]] as [ToolCategory, ToolDefinition[] | undefined])
-    .filter(([, list]) => list && list.length > 0) as [ToolCategory, ToolDefinition[]][];
+  const featuredTools = staticFeaturedTools.filter((t) => !bookmarkedSlugs.has(t.slug));
 
   return (
     <div className="space-y-10">
 
       <p className="text-sm text-muted-foreground/60 tracking-wide">no ads, just tools.</p>
 
-      {/* ── Section 1: Bookmarks ── */}
-      {bookmarkedTools.length > 0 && (
+      {/* ── Section 1: Bookmarks (JS-only, progressive enhancement) ── */}
+      {mounted && bookmarkedTools.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -488,26 +537,45 @@ export function ToolGrid() {
         <section>
           <SectionHeading>Featured</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {featuredTools.map((tool) => (
-              <FeaturedCard
-                key={tool.slug}
-                tool={tool}
-                bookmarked={bookmarkedSlugs.has(tool.slug)}
-                onToggleBookmark={toggleBookmark}
-                loggedIn={loggedIn}
+            {featuredTools.map((tool) =>
+              mounted ? (
+                <FeaturedCard
+                  key={tool.slug}
+                  tool={tool}
+                  bookmarked={bookmarkedSlugs.has(tool.slug)}
+                  onToggleBookmark={toggleBookmark}
+                  loggedIn={loggedIn}
+                />
+              ) : (
+                <StaticFeaturedCard key={tool.slug} tool={tool} />
+              )
+            )}
+            {mounted ? (
+              <DatabaseFeaturedCard loggedIn={loggedIn} />
+            ) : (
+              <StaticFeaturedCard
+                tool={{
+                  slug: "_databases",
+                  name: "Hosted Databases",
+                  description:
+                    "Provision and manage PostgreSQL databases directly from 1two.dev — no infrastructure setup required.",
+                  icon: "Database",
+                  category: "data",
+                  keywords: [],
+                  requiresAuth: true,
+                } as ToolDefinition}
               />
-            ))}
-            <DatabaseFeaturedCard loggedIn={loggedIn} />
+            )}
           </div>
         </section>
       )}
 
       {/* ── Section 3: All Tools, grouped by category ── */}
-      {categoryEntries.length > 0 && (
+      {staticCategoryEntries.length > 0 && (
         <section>
           <SectionHeading>All Tools</SectionHeading>
           <div className="space-y-6">
-            {categoryEntries.map(([category, catTools]) => (
+            {staticCategoryEntries.map(([category, catTools]) => (
               <div key={category}>
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
@@ -516,16 +584,24 @@ export function ToolGrid() {
                   <div className="flex-1 h-px bg-border/60" />
                 </div>
                 <div className="divide-y divide-border/40">
-                  {catTools.map((tool) => (
-                    <CompactToolRow
-                      key={tool.slug}
-                      tool={tool}
-                      bookmarked={bookmarkedSlugs.has(tool.slug)}
-                      featured={featuredSlugsSet.has(tool.slug)}
-                      onToggleBookmark={toggleBookmark}
-                      loggedIn={loggedIn}
-                    />
-                  ))}
+                  {catTools.map((tool) =>
+                    mounted ? (
+                      <CompactToolRow
+                        key={tool.slug}
+                        tool={tool}
+                        bookmarked={bookmarkedSlugs.has(tool.slug)}
+                        featured={featuredSlugsSet.has(tool.slug)}
+                        onToggleBookmark={toggleBookmark}
+                        loggedIn={loggedIn}
+                      />
+                    ) : (
+                      <StaticCompactToolRow
+                        key={tool.slug}
+                        tool={tool}
+                        featured={featuredSlugsSet.has(tool.slug)}
+                      />
+                    )
+                  )}
                 </div>
               </div>
             ))}
