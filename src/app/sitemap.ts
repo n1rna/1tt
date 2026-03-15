@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { tools, getSearchItems } from "@/lib/tools/registry";
+import { guides } from "@/lib/guides/registry";
 
 const SITE_URL = "https://1two.dev";
 
@@ -11,14 +12,29 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
+  // Sub-pages within tools (e.g. /tools/config/ssh)
   const subPages = getSearchItems()
-    .filter((item) => item.href.split("/").length > 3)
+    .filter((item) => item.href.startsWith("/tools/") && item.href.split("/").length > 3)
     .map((item) => ({
       url: `${SITE_URL}${item.href}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.7,
     }));
+
+  const guidePages = guides.map((guide) => ({
+    url: `${SITE_URL}/guides/${guide.slug}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
+  const staticPages = ["/guides", "/terms", "/privacy", "/support"].map((path) => ({
+    url: `${SITE_URL}${path}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.5,
+  }));
 
   return [
     {
@@ -29,5 +45,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     ...toolPages,
     ...subPages,
+    ...guidePages,
+    ...staticPages,
   ];
 }
