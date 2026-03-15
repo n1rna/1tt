@@ -12,7 +12,7 @@ import { useTheme } from "next-themes";
 import { Play, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { CellValue, QueryExecutor, SqlDialect, TableSchema } from "./types";
+import type { CellValue, QueryExecutor, SqlDialect, TableSchema, AiSession } from "./types";
 import { AiSqlBar } from "./ai-sql-bar";
 
 interface LocalQueryResult {
@@ -31,6 +31,8 @@ interface SqlEditorProps {
   aiEnabled?: boolean;
   initialValue?: string;
   onContentChange?: (content: string) => void;
+  aiSession?: AiSession;
+  onAiSessionChange?: (session: AiSession) => void;
 }
 
 function ResultsView({ result }: { result: LocalQueryResult | null }) {
@@ -145,7 +147,7 @@ function ResultsView({ result }: { result: LocalQueryResult | null }) {
 
 const DEFAULT_QUERY = "SELECT * FROM information_schema.tables\nWHERE table_schema = 'public'\nLIMIT 50;";
 
-export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabled = false, initialValue, onContentChange }: SqlEditorProps) {
+export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabled = false, initialValue, onContentChange, aiSession, onAiSessionChange }: SqlEditorProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const { resolvedTheme } = useTheme();
@@ -153,6 +155,7 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
 
   const [result, setResult] = useState<LocalQueryResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastQuerySummary, setLastQuerySummary] = useState<string | undefined>();
 
   const runQuery = useCallback(async () => {
     const view = editorViewRef.current;
@@ -168,6 +171,14 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
       const res = await queryExecutor(query);
       const execMs = Math.round(performance.now() - start);
       setResult({ ...res, execMs });
+      // Build summary for AI context
+      const summary =
+        res.columns && res.rows
+          ? `${res.rows.length} rows, columns: ${res.columns.join(", ")}`
+          : res.rowsAffected !== undefined
+          ? `${res.rowsAffected} rows affected`
+          : undefined;
+      setLastQuerySummary(summary);
     } catch (err) {
       const execMs = Math.round(performance.now() - start);
       setResult({
@@ -388,6 +399,10 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
         dialect={dialect}
         onSqlGenerated={setEditorContent}
         aiEnabled={aiEnabled}
+        aiSession={aiSession}
+        onAiSessionChange={onAiSessionChange}
+        getEditorContent={() => editorViewRef.current?.state.doc.toString() ?? ""}
+        lastQuerySummary={lastQuerySummary}
       />
 
       {/* Run button + meta */}

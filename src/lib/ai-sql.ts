@@ -1,4 +1,4 @@
-import type { TableSchema, SqlDialect } from "@/components/account/database-studio/types";
+import type { TableSchema, SqlDialect, AiMessage } from "@/components/account/database-studio/types";
 
 export interface AiSqlResponse {
   sql: string;
@@ -27,6 +27,55 @@ export async function generateAiSql(
     return { sql: "", tokensUsed: 0, error: (err as { error?: string }).error ?? `HTTP ${res.status}` };
   }
   return res.json() as Promise<AiSqlResponse>;
+}
+
+export interface AiSqlChatResponse {
+  sql: string;
+  reasoning?: string;
+  tokensUsed: number;
+  error?: string;
+}
+
+export async function generateAiSqlChat(
+  messages: AiMessage[],
+  dialect: SqlDialect
+): Promise<AiSqlChatResponse> {
+  const res = await fetch("/api/proxy/ai/sql", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, dialect }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return { sql: "", tokensUsed: 0, error: (err as { error?: string }).error ?? `HTTP ${res.status}` };
+  }
+  return res.json() as Promise<AiSqlChatResponse>;
+}
+
+export function buildSchemaSystemMessage(schema: TableSchema[], dialect: SqlDialect): string {
+  const schemaText = schema.map(t => {
+    const cols = t.columns.map(c => {
+      let col = `  ${c.name} ${c.type}`;
+      if (c.isPrimary) col += " PRIMARY KEY";
+      if (c.foreignKey) col += ` → ${c.foreignKey.table}(${c.foreignKey.column})`;
+      return col;
+    }).join("\n");
+    return `Table "${t.schema}"."${t.name}":\n${cols}`;
+  }).join("\n\n");
+
+  return `You are a SQL expert for ${dialect === "postgres" ? "PostgreSQL" : "SQLite"} databases.
+
+Database schema:
+${schemaText}
+
+Rules:
+- First write a brief reasoning (1-2 sentences) explaining your approach
+- Then output the SQL in a fenced code block: \`\`\`sql ... \`\`\`
+- Use ${dialect === "postgres" ? "PostgreSQL" : "SQLite"} syntax
+- Use exact table and column names from the schema
+- Include LIMIT 100 for SELECT queries unless specified otherwise
+- For follow-up requests, use conversation context to understand what the user wants modified`;
 }
 
 export async function getAiSqlSuggestions(

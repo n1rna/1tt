@@ -37,13 +37,19 @@ type aiSqlTable struct {
 }
 
 type aiSqlRequest struct {
-	Prompt  string       `json:"prompt"`
-	Schema  []aiSqlTable `json:"schema"`
-	Dialect string       `json:"dialect"`
+	// Legacy single-turn fields.
+	Prompt string       `json:"prompt"`
+	Schema []aiSqlTable `json:"schema"`
+
+	// Conversation mode: if non-nil, Messages takes precedence.
+	Messages []chatMessage `json:"messages"`
+
+	Dialect string `json:"dialect"`
 }
 
 type aiSqlResponse struct {
 	SQL        string `json:"sql"`
+	Reasoning  string `json:"reasoning,omitempty"`
 	TokensUsed int    `json:"tokensUsed"`
 }
 
@@ -145,6 +151,11 @@ Rules:
 - Make reasonable assumptions for ambiguous requests`, dialect, schemaTxt, dialect)
 }
 
+// conversationSystemSuffix is appended to the frontend-provided system message
+// when using conversation mode, instructing the LLM to emit both reasoning and
+// a fenced SQL block so that parseAiResponse can split them cleanly.
+const conversationSystemSuffix = "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
+
 // stripMarkdownFences removes optional ```sql ... ``` or ``` ... ``` fences from LLM output.
 func stripMarkdownFences(s string) string {
 	s = strings.TrimSpace(s)
@@ -165,10 +176,47 @@ func stripMarkdownFences(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// callChatCompletion sends a single chat completion request to the configured
-// OpenAI-compatible endpoint and returns the assistant message content plus
-// total token count.
-func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (string, int, error) {
+// parseAiResponse splits an LLM response that may contain a ```sql...``` fenced
+// block into a (reasoning, sql) pair.
+//
+//   - If a ```sql fence is present: everything before it is the reasoning, the
+//     content inside the fence is the SQL.
+//   - If no fence is present: the entire content is treated as SQL (legacy
+//     behaviour), and reasoning is empty.
+func parseAiResponse(content string) (reasoning, sqlOut string) {
+	const openFence = "```sql"
+	const closeFence = "```"
+
+	start := strings.Index(content, openFence)
+	if start == -1 {
+		// No fence — treat the whole response as SQL.
+		return "", stripMarkdownFences(content)
+	}
+
+	reasoning = strings.TrimSpace(content[:start])
+
+	// Advance past the opening fence line.
+	afterOpen := content[start+len(openFence):]
+	// Skip the newline immediately following the fence marker.
+	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
+		afterOpen = afterOpen[1:]
+	}
+
+	end := strings.Index(afterOpen, closeFence)
+	if end == -1 {
+		// Closing fence missing — use everything after the open fence as SQL.
+		sqlOut = strings.TrimSpace(afterOpen)
+		return reasoning, sqlOut
+	}
+
+	sqlOut = strings.TrimSpace(afterOpen[:end])
+	return reasoning, sqlOut
+}
+
+// callChatCompletionMessages sends a chat completion request to the configured
+// OpenAI-compatible endpoint using the provided messages slice directly.
+// It returns the assistant message content and total token count.
+func callChatCompletionMessages(cfg *config.Config, messages []chatMessage) (string, int, error) {
 	baseURL := cfg.LLMBaseURL
 	if baseURL == "" {
 		baseURL = "https://api.moonshot.ai/v1"
@@ -181,11 +229,8 @@ func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (st
 	}
 
 	payload := chatCompletionRequest{
-		Model: model,
-		Messages: []chatMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userPrompt},
-		},
+		Model:     model,
+		Messages:  messages,
 		Temp:      0.1,
 		MaxTokens: 2000,
 	}
@@ -230,10 +275,29 @@ func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (st
 	return content, completion.Usage.TotalTokens, nil
 }
 
+// callChatCompletion is a convenience wrapper around callChatCompletionMessages
+// that builds a two-message (system + user) conversation from discrete prompts.
+func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (string, int, error) {
+	messages := []chatMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+	return callChatCompletionMessages(cfg, messages)
+}
+
 // --- Handlers ---
 
 // GenerateAiSql handles POST /ai/sql.
 // Auth required. Pro/Max plan required. Calls the LLM and returns a SQL query.
+//
+// Accepts two request formats:
+//
+//  1. Legacy single-turn: {"prompt":"...","schema":[...],"dialect":"postgres"}
+//  2. Conversation:       {"messages":[{"role":"...","content":"..."},...], "dialect":"postgres"}
+//
+// When "messages" is present (non-nil), conversation mode is used and the
+// frontend-supplied system message is augmented with reasoning/fence instructions.
+// Both modes return {"sql":"...","reasoning":"...","tokensUsed":N}.
 func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
@@ -256,20 +320,52 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		if strings.TrimSpace(req.Prompt) == "" {
-			http.Error(w, `{"error":"prompt is required"}`, http.StatusBadRequest)
-			return
+		var (
+			rawContent string
+			tokens     int
+			llmErr     error
+		)
+
+		if req.Messages != nil {
+			// --- Conversation mode ---
+			// The frontend provides the full messages array including a system
+			// message that already contains the schema. Append the
+			// reasoning+fence instruction to the first system message so the
+			// LLM knows how to format its response.
+			messages := make([]chatMessage, len(req.Messages))
+			copy(messages, req.Messages)
+
+			for i, msg := range messages {
+				if msg.Role == "system" {
+					messages[i].Content = msg.Content + conversationSystemSuffix
+					break
+				}
+			}
+
+			if len(messages) == 0 {
+				http.Error(w, `{"error":"messages array must not be empty"}`, http.StatusBadRequest)
+				return
+			}
+
+			rawContent, tokens, llmErr = callChatCompletionMessages(cfg, messages)
+		} else {
+			// --- Legacy single-turn mode ---
+			if strings.TrimSpace(req.Prompt) == "" {
+				http.Error(w, `{"error":"prompt is required"}`, http.StatusBadRequest)
+				return
+			}
+
+			sysPrompt := buildSystemPrompt(req.Dialect, req.Schema)
+			rawContent, tokens, llmErr = callChatCompletion(cfg, sysPrompt, req.Prompt)
 		}
 
-		sysPrompt := buildSystemPrompt(req.Dialect, req.Schema)
-		rawSQL, tokens, err := callChatCompletion(cfg, sysPrompt, req.Prompt)
-		if err != nil {
-			log.Printf("ai_sql: llm error for user %s: %v", userID, err)
+		if llmErr != nil {
+			log.Printf("ai_sql: llm error for user %s: %v", userID, llmErr)
 			http.Error(w, `{"error":"failed to generate SQL"}`, http.StatusInternalServerError)
 			return
 		}
 
-		cleanSQL := stripMarkdownFences(rawSQL)
+		reasoning, cleanSQL := parseAiResponse(rawContent)
 
 		// Track usage — one increment per call (simple approach).
 		if _, err := billing.IncrementUsage(r.Context(), db, userID, "ai-token-used"); err != nil {
@@ -280,6 +376,7 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(aiSqlResponse{
 			SQL:        cleanSQL,
+			Reasoning:  reasoning,
 			TokensUsed: tokens,
 		})
 	}

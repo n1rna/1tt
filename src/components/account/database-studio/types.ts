@@ -63,3 +63,23 @@ export interface QueryResult {
 export type QueryExecutor = (sql: string) => Promise<QueryResult>;
 
 export type SqlDialect = "postgres" | "sqlite";
+
+export interface AiMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface AiSessionEntry {
+  id: string;
+  userPrompt: string;
+  reasoning?: string;
+  sql: string;
+  status: "thinking" | "done" | "error";
+  error?: string;
+}
+
+export interface AiSession {
+  messages: AiMessage[];
+  entries: AiSessionEntry[];
+  schemaInjected: boolean;
+}

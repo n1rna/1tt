@@ -14,6 +14,7 @@ import type {
   TableSchema,
   QueryExecutor,
   SqlDialect,
+  AiSession,
 } from "./types";
 
 let sqlTabCounter = 1;
@@ -52,6 +53,8 @@ export function StudioShell({
   const [tabViews, setTabViews] = useState<Record<string, "data" | "structure">>({});
   // Per-tab SQL content stored separately to survive tab switching
   const [tabSqlContent, setTabSqlContent] = useState<Record<string, string>>({});
+  // Per-tab AI session state
+  const [tabAiSessions, setTabAiSessions] = useState<Record<string, AiSession>>({});
 
   const openTable = useCallback((schemaName: string, tableName: string) => {
     const id = makeTableTabId(schemaName, tableName);
@@ -94,6 +97,10 @@ export function StudioShell({
       return next;
     });
     setTabSqlContent((prev) => {
+      const { [id]: _, ...rest } = prev;
+      return rest;
+    });
+    setTabAiSessions((prev) => {
       const { [id]: _, ...rest } = prev;
       return rest;
     });
@@ -182,6 +189,10 @@ export function StudioShell({
               aiEnabled={aiEnabled}
               initialValue={tabSqlContent[activeTab.id]}
               onContentChange={(content) => handleSqlContentChange(activeTab.id, content)}
+              aiSession={tabAiSessions[activeTab.id]}
+              onAiSessionChange={(session) =>
+                setTabAiSessions((prev) => ({ ...prev, [activeTab.id]: session }))
+              }
             />
           )}
         </div>
