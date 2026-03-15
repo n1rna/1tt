@@ -383,14 +383,12 @@ export function SqlEditor({ queryExecutor, dialect = "postgres", schema, aiEnabl
       </div>
 
       {/* AI SQL bar */}
-      {schema && schema.length > 0 && (
-        <AiSqlBar
-          schema={schema}
-          dialect={dialect}
-          onSqlGenerated={setEditorContent}
-          aiEnabled={aiEnabled}
-        />
-      )}
+      <AiSqlBar
+        schema={schema ?? []}
+        dialect={dialect}
+        onSqlGenerated={setEditorContent}
+        aiEnabled={aiEnabled}
+      />
 
       {/* Run button + meta */}
       <div className="flex items-center gap-3 px-3 py-2 border-b bg-muted/10 shrink-0">
