@@ -644,17 +644,20 @@ func (s *Service) GetJob(ctx context.Context, userID, jobID string) (*Job, error
 	return &job, nil
 }
 
-// CheckCache reports whether a valid cache entry exists for the given URL and depth.
-func (s *Service) CheckCache(ctx context.Context, rawURL string, depth int) (*CacheInfo, error) {
+// CheckCache reports whether a valid cache entry exists for the given URL.
+// It returns the best available cache (highest page count) regardless of depth.
+func (s *Service) CheckCache(ctx context.Context, rawURL string, _ int) (*CacheInfo, error) {
 	normalizedURL := crawl.NormalizeURL(rawURL)
 
 	const q = `
 		SELECT pages_count, created_at, expires_at
 		FROM llms_cache
-		WHERE normalized_url = $1 AND scan_depth = $2 AND expires_at > NOW()`
+		WHERE normalized_url = $1 AND expires_at > NOW()
+		ORDER BY pages_count DESC
+		LIMIT 1`
 
 	var info CacheInfo
-	err := s.db.QueryRowContext(ctx, q, normalizedURL, depth).
+	err := s.db.QueryRowContext(ctx, q, normalizedURL).
 		Scan(&info.PagesCount, &info.CachedAt, &info.ExpiresAt)
 	if err == sql.ErrNoRows {
 		return &CacheInfo{Cached: false}, nil
