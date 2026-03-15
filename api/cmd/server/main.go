@@ -190,10 +190,10 @@ func main() {
 				r.Get("/sqlite/{id}", handler.GetSqliteDB(db))
 				r.Delete("/sqlite/{id}", handler.DeleteSqliteDB(db, tursoClient))
 			}
-			// AI SQL generation.
+			// AI query generation (SQL, Elasticsearch, etc.)
 			if db != nil {
-				r.Post("/ai/sql", handler.GenerateAiSql(cfg, db))
-				r.Post("/ai/sql/suggestions", handler.GenerateAiSqlSuggestions(db))
+				r.Post("/ai/sql", handler.GenerateAiQuery(cfg, db))
+				r.Post("/ai/sql/suggestions", handler.GenerateAiQuerySuggestions(db))
 			}
 			if llmsSvc != nil && db != nil && r2 != nil {
 				r.Post("/llms/generate", handler.GenerateLlms(llmsSvc))

@@ -17,29 +17,29 @@ import (
 
 // --- Request / response types ---
 
-type aiSqlColumn struct {
+type aiQueryColumn struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	IsPrimary bool   `json:"isPrimary"`
 }
 
-type aiSqlForeignKey struct {
+type aiQueryForeignKey struct {
 	Column    string `json:"column"`
 	RefTable  string `json:"refTable"`
 	RefColumn string `json:"refColumn"`
 }
 
-type aiSqlTable struct {
+type aiQueryTable struct {
 	Schema      string            `json:"schema"`
 	Name        string            `json:"name"`
-	Columns     []aiSqlColumn     `json:"columns"`
-	ForeignKeys []aiSqlForeignKey `json:"foreignKeys"`
+	Columns     []aiQueryColumn     `json:"columns"`
+	ForeignKeys []aiQueryForeignKey `json:"foreignKeys"`
 }
 
-type aiSqlRequest struct {
+type aiQueryRequest struct {
 	// Legacy single-turn fields.
 	Prompt string       `json:"prompt"`
-	Schema []aiSqlTable `json:"schema"`
+	Schema []aiQueryTable `json:"schema"`
 
 	// Conversation mode: if non-nil, Messages takes precedence.
 	Messages []chatMessage `json:"messages"`
@@ -47,7 +47,7 @@ type aiSqlRequest struct {
 	Dialect string `json:"dialect"`
 }
 
-type aiSqlResponse struct {
+type aiQueryResponse struct {
 	SQL        string `json:"sql"`
 	Reasoning  string `json:"reasoning,omitempty"`
 	TokensUsed int    `json:"tokensUsed"`
@@ -55,18 +55,18 @@ type aiSqlResponse struct {
 
 // --- Suggestion types ---
 
-type aiSqlSuggestion struct {
+type aiQuerySuggestion struct {
 	Label string `json:"label"`
 	SQL   string `json:"sql"`
 }
 
-type aiSqlSuggestionsRequest struct {
-	Schema  []aiSqlTable `json:"schema"`
+type aiQuerySuggestionsRequest struct {
+	Schema  []aiQueryTable `json:"schema"`
 	Dialect string       `json:"dialect"`
 }
 
-type aiSqlSuggestionsResponse struct {
-	Suggestions []aiSqlSuggestion `json:"suggestions"`
+type aiQuerySuggestionsResponse struct {
+	Suggestions []aiQuerySuggestion `json:"suggestions"`
 }
 
 // --- OpenAI-compatible chat completion wire types ---
@@ -95,7 +95,7 @@ type chatCompletionResponse struct {
 // --- Schema formatter ---
 
 // formatSchema converts the schema array into a compact text block for the system prompt.
-func formatSchema(tables []aiSqlTable) string {
+func formatSchema(tables []aiQueryTable) string {
 	var sb strings.Builder
 	for i, t := range tables {
 		if i > 0 {
@@ -108,7 +108,7 @@ func formatSchema(tables []aiSqlTable) string {
 		}
 
 		// Build a lookup of FK target by column name for inline annotation.
-		fkByCol := make(map[string]aiSqlForeignKey, len(t.ForeignKeys))
+		fkByCol := make(map[string]aiQueryForeignKey, len(t.ForeignKeys))
 		for _, fk := range t.ForeignKeys {
 			fkByCol[fk.Column] = fk
 		}
@@ -132,10 +132,10 @@ func formatSchema(tables []aiSqlTable) string {
 	return sb.String()
 }
 
-// buildSystemPrompt constructs the SQL-generation system prompt.
+// buildSystemPrompt constructs the query-generation system prompt based on dialect.
 // For the "elasticsearch" dialect the tables parameter is unused; the caller
 // is expected to supply index mappings via the conversation messages instead.
-func buildSystemPrompt(dialect string, tables []aiSqlTable) string {
+func buildSystemPrompt(dialect string, tables []aiQueryTable) string {
 	if dialect == "" {
 		dialect = "postgres"
 	}
@@ -204,14 +204,13 @@ func stripMarkdownFences(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// parseAiResponse splits an LLM response that may contain a ```sql...``` fenced
-// block into a (reasoning, sql) pair.
+// parseAiResponse splits an LLM response that may contain a fenced code block
+// (```sql, ```json, or plain ```) into a (reasoning, query) pair.
 //
-//   - If a ```sql fence is present: everything before it is the reasoning, the
-//     content inside the fence is the SQL.
-//   - If no fence is present: the entire content is treated as SQL (legacy
-//     behaviour), and reasoning is empty.
-func parseAiResponse(content string) (reasoning, sqlOut string) {
+//   - If a fenced block is present: everything before it is the reasoning, the
+//     content inside the fence is the query output.
+//   - If no fence is present: the entire content is treated as the query output.
+func parseAiResponse(content string) (reasoning, queryOut string) {
 	// Recognise both ```sql and ```json opening fences.
 	openFences := []string{"```sql", "```json", "```"}
 	const closeFence = "```"
@@ -251,12 +250,12 @@ func parseAiResponse(content string) (reasoning, sqlOut string) {
 	end := strings.Index(afterOpen, closeFence)
 	if end == -1 {
 		// Closing fence missing — use everything after the open fence.
-		sqlOut = strings.TrimSpace(afterOpen)
-		return reasoning, sqlOut
+		queryOut = strings.TrimSpace(afterOpen)
+		return reasoning, queryOut
 	}
 
-	sqlOut = strings.TrimSpace(afterOpen[:end])
-	return reasoning, sqlOut
+	queryOut = strings.TrimSpace(afterOpen[:end])
+	return reasoning, queryOut
 }
 
 // callChatCompletionMessages sends a chat completion request to the configured
@@ -333,7 +332,7 @@ func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (st
 
 // --- Handlers ---
 
-// GenerateAiSql handles POST /ai/sql.
+// GenerateAiQuery handles POST /ai/sql — generates SQL or Elasticsearch queries via LLM.
 // Auth required. Pro/Max plan required. Calls the LLM and returns a SQL query.
 //
 // Accepts two request formats:
@@ -344,7 +343,7 @@ func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (st
 // When "messages" is present (non-nil), conversation mode is used and the
 // frontend-supplied system message is augmented with reasoning/fence instructions.
 // Both modes return {"sql":"...","reasoning":"...","tokensUsed":N}.
-func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
+func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
 		if userID == "" {
@@ -360,7 +359,7 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		var req aiSqlRequest
+		var req aiQueryRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
@@ -372,7 +371,7 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			llmErr     error
 		)
 
-		log.Printf("ai_sql: request — prompt=%q messages_len=%d dialect=%q", req.Prompt, len(req.Messages), req.Dialect)
+		log.Printf("ai_query: request — prompt=%q messages_len=%d dialect=%q", req.Prompt, len(req.Messages), req.Dialect)
 
 		if req.Messages != nil && len(req.Messages) > 0 {
 			// --- Conversation mode ---
@@ -409,16 +408,16 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 		}
 
 		if llmErr != nil {
-			log.Printf("ai_sql: llm error for user %s: %v", userID, llmErr)
+			log.Printf("ai_query: llm error for user %s: %v", userID, llmErr)
 			http.Error(w, `{"error":"failed to generate SQL"}`, http.StatusInternalServerError)
 			return
 		}
 
-		reasoning, cleanSQL := parseAiResponse(rawContent)
+		reasoning, cleanQuery := parseAiResponse(rawContent)
 
 		// For Elasticsearch: ensure the output is clean JSON without HTTP prefix or comments
 		if req.Dialect == "elasticsearch" {
-			cleanSQL = sanitizeEsJSON(cleanSQL)
+			cleanQuery = sanitizeEsJSON(cleanQuery)
 		}
 
 		// Track actual token usage from the LLM response.
@@ -427,25 +426,25 @@ func GenerateAiSql(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			tokenCount = 1 // minimum 1 so every call is tracked
 		}
 		if _, err := billing.IncrementUsageBy(r.Context(), db, userID, "ai-token-used", tokenCount); err != nil {
-			log.Printf("ai_sql: usage increment error for user %s: %v", userID, err)
+			log.Printf("ai_query: usage increment error for user %s: %v", userID, err)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(aiSqlResponse{
-			SQL:        cleanSQL,
+		json.NewEncoder(w).Encode(aiQueryResponse{
+			SQL:        cleanQuery,
 			Reasoning:  reasoning,
 			TokensUsed: tokens,
 		})
 	}
 }
 
-// GenerateAiSqlSuggestions handles POST /ai/sql/suggestions.
+// GenerateAiQuerySuggestions handles POST /ai/sql/suggestions.
 // Auth required. Rule-based — no LLM call. Analyzes the schema and returns
 // up to 8 canned query suggestions.
 //
 // When dialect == "elasticsearch" the schema field is ignored and the
 // fields field ([]string) is used to derive ES-specific suggestions.
-func GenerateAiSqlSuggestions(db *sql.DB) http.HandlerFunc {
+func GenerateAiQuerySuggestions(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
 		if userID == "" {
@@ -473,12 +472,12 @@ func GenerateAiSqlSuggestions(db *sql.DB) http.HandlerFunc {
 			}
 			suggestions := buildEsSuggestions(fields)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(aiSqlSuggestionsResponse{Suggestions: suggestions})
+			json.NewEncoder(w).Encode(aiQuerySuggestionsResponse{Suggestions: suggestions})
 			return
 		}
 
 		// SQL path — unmarshal into the typed struct.
-		var req aiSqlSuggestionsRequest
+		var req aiQuerySuggestionsRequest
 		if s, ok := raw["schema"]; ok {
 			_ = json.Unmarshal(s, &req.Schema)
 		}
@@ -486,7 +485,7 @@ func GenerateAiSqlSuggestions(db *sql.DB) http.HandlerFunc {
 
 		suggestions := buildSuggestions(req.Schema, req.Dialect)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(aiSqlSuggestionsResponse{Suggestions: suggestions})
+		json.NewEncoder(w).Encode(aiQuerySuggestionsResponse{Suggestions: suggestions})
 	}
 }
 
@@ -511,7 +510,7 @@ func quoteIdent(s string) string {
 }
 
 // qualifiedTable returns "schema"."table" or just "table" depending on schema presence.
-func qualifiedTable(t aiSqlTable) string {
+func qualifiedTable(t aiQueryTable) string {
 	if t.Schema != "" && t.Schema != "public" {
 		return quoteIdent(t.Schema) + "." + quoteIdent(t.Name)
 	}
@@ -519,25 +518,25 @@ func qualifiedTable(t aiSqlTable) string {
 }
 
 // buildSuggestions generates rule-based query suggestions from the schema.
-func buildSuggestions(tables []aiSqlTable, dialect string) []aiSqlSuggestion {
+func buildSuggestions(tables []aiQueryTable, dialect string) []aiQuerySuggestion {
 	const maxSuggestions = 8
 
 	if dialect == "" {
 		dialect = "postgres"
 	}
 
-	var suggestions []aiSqlSuggestion
+	var suggestions []aiQuerySuggestion
 
 	add := func(label, sqlStr string) bool {
 		if len(suggestions) >= maxSuggestions {
 			return false
 		}
-		suggestions = append(suggestions, aiSqlSuggestion{Label: label, SQL: sqlStr})
+		suggestions = append(suggestions, aiQuerySuggestion{Label: label, SQL: sqlStr})
 		return true
 	}
 
 	// Build a name→table map for FK join resolution.
-	tableByName := make(map[string]aiSqlTable, len(tables))
+	tableByName := make(map[string]aiQueryTable, len(tables))
 	for _, t := range tables {
 		tableByName[t.Name] = t
 	}
@@ -700,15 +699,15 @@ func classifyEsField(name string) esFieldKind {
 // buildEsSuggestions generates rule-based Elasticsearch query suggestions from
 // a list of field names.  It always starts with "Match all documents" and then
 // adds up to 7 field-specific chips.
-func buildEsSuggestions(fields []string) []aiSqlSuggestion {
+func buildEsSuggestions(fields []string) []aiQuerySuggestion {
 	const max = 8
-	var suggestions []aiSqlSuggestion
+	var suggestions []aiQuerySuggestion
 
 	add := func(label, body string) bool {
 		if len(suggestions) >= max {
 			return false
 		}
-		suggestions = append(suggestions, aiSqlSuggestion{Label: label, SQL: body})
+		suggestions = append(suggestions, aiQuerySuggestion{Label: label, SQL: body})
 		return true
 	}
 
