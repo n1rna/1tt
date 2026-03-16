@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { getToolBySlug } from "@/lib/tools/registry";
+import { getDocByToolSlug } from "@/lib/docs/registry";
 import * as icons from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { PromoBanner } from "./promo-banner";
 
 interface ToolLayoutProps {
@@ -18,6 +21,7 @@ export function ToolLayout({ slug, children, sync, toolbar }: ToolLayoutProps) {
   const Icon = (icons as unknown as Record<string, icons.LucideIcon>)[
     tool.icon
   ];
+  const doc = getDocByToolSlug(slug);
 
   return (
     <div>
@@ -31,9 +35,19 @@ export function ToolLayout({ slug, children, sync, toolbar }: ToolLayoutProps) {
           {sync && (
             <div className="flex items-center gap-1">{sync}</div>
           )}
-          {toolbar && (
-            <div className="flex items-center gap-1 ml-auto">{toolbar}</div>
-          )}
+          <div className="flex items-center gap-1 ml-auto">
+            {doc && (
+              <Link
+                href={`/docs/${doc.slug}`}
+                target="_blank"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Docs</span>
+              </Link>
+            )}
+            {toolbar}
+          </div>
         </div>
       </div>
       <div className="max-w-6xl mx-auto w-full p-6">{children}</div>

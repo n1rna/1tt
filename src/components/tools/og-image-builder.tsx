@@ -26,7 +26,9 @@ import {
   Copy,
   Check,
   Code,
+  BookOpen,
 } from "lucide-react";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -1631,6 +1633,14 @@ export function OgImageBuilder({
           {!isCollection && <SyncToggle {...syncToggleProps} />}
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/docs/og-images"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Docs</span>
+          </Link>
           <NativeSelect
             value={exportFormat}
             onChange={(v) => setExportFormat(v as ExportFormat)}

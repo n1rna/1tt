@@ -31,6 +31,7 @@ import {
   Check,
   Activity,
   HardDrive,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +41,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useSyncedState } from "@/lib/sync";
 import { Globe, GlobeLock } from "lucide-react";
@@ -2841,6 +2843,14 @@ export function ElasticsearchExplorer() {
           <Database className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">Elasticsearch Explorer</span>
           <div className="flex items-center gap-2 ml-auto">
+            <Link
+              href="/docs/elasticsearch"
+              target="_blank"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Docs</span>
+            </Link>
             <EsSyncMenu connSync={connSync} stateSync={stateSync} />
             <Button
               variant="outline"
