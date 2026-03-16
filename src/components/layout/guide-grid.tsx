@@ -1,7 +1,8 @@
 import Link from "next/link";
 import * as icons from "lucide-react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BookOpen } from "lucide-react";
 import { guides } from "@/lib/guides/registry";
+import { docs } from "@/lib/docs/registry";
 import { cn } from "@/lib/utils";
 
 const GRID_SPANS = [
@@ -87,6 +88,49 @@ export function GuideGrid() {
           );
         })}
       </div>
+
+      {/* Tool Documentation */}
+      {docs.length > 0 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Tool Documentation</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              In-depth documentation for individual tools.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {docs.map((doc) => {
+              const Icon = (icons as unknown as Record<string, icons.LucideIcon>)[
+                doc.icon
+              ];
+              return (
+                <Link
+                  key={doc.slug}
+                  href={`/docs/${doc.slug}`}
+                  className="group flex items-start gap-3 rounded-lg border border-border/50 bg-card px-4 py-3 hover:border-border/80 hover:shadow-sm transition-all"
+                >
+                  <div className="rounded-lg bg-muted/50 p-2 shrink-0">
+                    {Icon ? (
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium group-hover:underline underline-offset-2 decoration-foreground/30">
+                      {doc.title}
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                      {doc.description}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-foreground shrink-0 mt-1 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
