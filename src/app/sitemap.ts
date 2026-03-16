@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { tools, getSearchItems } from "@/lib/tools/registry";
 import { guides } from "@/lib/guides/registry";
+import { docs } from "@/lib/docs/registry";
 
 const SITE_URL = "https://1tt.dev";
 
@@ -29,6 +30,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
+  const docPages = docs.map((doc) => ({
+    url: `${SITE_URL}/docs/${doc.slug}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
   const staticPages = ["/guides", "/terms", "/privacy", "/support"].map((path) => ({
     url: `${SITE_URL}${path}`,
     lastModified: new Date(),
@@ -46,6 +54,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...toolPages,
     ...subPages,
     ...guidePages,
+    ...docPages,
     ...staticPages,
   ];
 }

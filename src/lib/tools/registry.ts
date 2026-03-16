@@ -312,14 +312,6 @@ export const tools: ToolDefinition[] = [
     requiresAuth: true,
   },
   {
-    slug: "canvas",
-    name: "Canvas Editor",
-    description: "Create and edit images with text, shapes, and layers — lightweight browser-based design tool",
-    category: "media",
-    icon: "PenTool",
-    keywords: ["canvas", "editor", "image", "design", "draw", "shapes", "text", "layers", "png", "export", "canva", "photoshop"],
-  },
-  {
     slug: "upload",
     name: "File Upload",
     description: "Upload, manage, and share files securely with your account",

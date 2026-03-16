@@ -411,7 +411,7 @@ export function DocLayout({
       <MobileToc headings={headings} activeId={activeId} />
 
       {/* Body: sidebar + content */}
-      <div className="flex gap-10 items-start">
+      <div className="flex gap-10">
         {/* Sidebar — hidden on mobile */}
         <div className="hidden lg:block">
           <SidebarToc headings={headings} activeId={activeId} pages={pages} />

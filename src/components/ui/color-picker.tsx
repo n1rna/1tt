@@ -207,10 +207,13 @@ export function ColorPicker({
       return;
     }
     const rect = containerRef.current.getBoundingClientRect();
+    const pickerWidth = 224; // w-56 = 14rem = 224px
     const pickerHeight = 300;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top = spaceBelow < pickerHeight ? rect.top - pickerHeight - 4 : rect.bottom + 4;
-    setDropdownPos({ top, left: rect.left });
+    // Clamp horizontally so the picker stays within the viewport
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - pickerWidth - 8));
+    setDropdownPos({ top, left });
   }, [open]);
 
   // Sync external value changes (skip if value matches what we last emitted)
