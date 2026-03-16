@@ -41,7 +41,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
     >
       {children}
       {show && (
-        <div className="absolute right-0 top-full mt-1.5 z-50 whitespace-nowrap rounded-md bg-popover border border-border px-2 py-1 text-[11px] text-popover-foreground shadow-sm pointer-events-none">
+        <div className="absolute left-0 top-full mt-1.5 z-50 whitespace-nowrap rounded-md bg-popover border border-border px-2 py-1 text-[11px] text-popover-foreground shadow-sm pointer-events-none">
           {text}
         </div>
       )}
