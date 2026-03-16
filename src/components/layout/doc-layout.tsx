@@ -222,7 +222,7 @@ interface SidebarTocProps {
 function SidebarToc({ headings, activeId, pages }: SidebarTocProps) {
   return (
     <aside className="w-56 shrink-0">
-      <div className="sticky top-20 space-y-6">
+      <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto space-y-6">
         {/* Page navigation */}
         {pages && pages.length > 0 && (
           <nav>
@@ -411,7 +411,7 @@ export function DocLayout({
       <MobileToc headings={headings} activeId={activeId} />
 
       {/* Body: sidebar + content */}
-      <div className="flex gap-10">
+      <div className="flex gap-10 items-start">
         {/* Sidebar — hidden on mobile */}
         <div className="hidden lg:block">
           <SidebarToc headings={headings} activeId={activeId} pages={pages} />
