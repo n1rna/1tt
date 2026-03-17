@@ -158,6 +158,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["markdown", "md", "editor", "preview", "write", "format", "text"],
   },
   {
+    slug: "regex",
+    name: "Regex Tester",
+    description: "Test and debug regular expressions with live match highlighting, capture groups, replace mode, and code generation",
+    category: "text",
+    icon: "RegexIcon",
+    keywords: ["regex", "regexp", "regular expression", "pattern", "match", "test", "replace", "capture group", "flags"],
+  },
+  {
     slug: "pomodoro",
     name: "Pomodoro Timer",
     description: "Focus timer with customizable work/break durations, daily goals, progress tracking, and browser notifications",
@@ -180,6 +188,14 @@ export const tools: ToolDefinition[] = [
     category: "generators",
     icon: "Type",
     keywords: ["logo", "text", "brand", "favicon", "icon", "svg", "png", "generate", "minimal", "typography"],
+  },
+  {
+    slug: "qr",
+    name: "QR Code Generator",
+    description: "Generate QR codes for URLs, WiFi credentials, vCard contacts, email, SMS, and more",
+    category: "generators",
+    icon: "QrCode",
+    keywords: ["qr", "qr code", "qrcode", "generate", "url", "wifi", "vcard", "contact", "sms", "barcode", "scan"],
   },
   {
     slug: "image",
@@ -228,6 +244,14 @@ export const tools: ToolDefinition[] = [
     category: "web",
     icon: "ShieldCheck",
     keywords: ["ssl", "tls", "certificate", "https", "security", "expiry", "certificate chain", "x509"],
+  },
+  {
+    slug: "cors",
+    name: "CORS Debugger",
+    description: "Check CORS headers and debug cross-origin request issues",
+    category: "web",
+    icon: "Shield",
+    keywords: ["cors", "cross-origin", "access-control", "preflight", "options", "allow-origin", "headers", "browser security"],
   },
   {
     slug: "invoice",
@@ -319,6 +343,14 @@ export const tools: ToolDefinition[] = [
     icon: "Upload",
     keywords: ["upload", "file", "share", "storage", "cloud", "send"],
     requiresAuth: true,
+  },
+  {
+    slug: "sql",
+    name: "SQL Formatter",
+    description: "Format, minify, and beautify SQL with dialect support, syntax highlighting, and AI-powered query generation from natural language",
+    category: "formatting",
+    icon: "Database",
+    keywords: ["sql", "formatter", "format", "beautify", "minify", "postgres", "mysql", "sqlite", "dialect", "query", "ai", "natural language"],
   },
 ];
 

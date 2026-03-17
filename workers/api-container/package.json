@@ -9,6 +9,7 @@
     "wrangler": "^4.0.0"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.1.1"
+    "@cloudflare/containers": "^0.1.1",
+    "@radix-ui/react-collapsible": "^1.1.12"
   }
 }

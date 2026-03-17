@@ -56,3 +56,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 api/server
+
+# planning docs
+TOOL_IDEAS.md
