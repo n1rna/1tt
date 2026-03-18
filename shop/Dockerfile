@@ -26,5 +26,5 @@ COPY --from=builder /app/src ./src
 
 EXPOSE 9000
 
-# Start server directly — run migrations separately via exec
-CMD ["npx", "medusa", "start"]
+# Run migrations on every start (idempotent — no-op if already up to date), then start server
+CMD ["sh", "-c", "npx medusa db:migrate && npx medusa start"]
