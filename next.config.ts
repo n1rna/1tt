@@ -4,7 +4,11 @@ import withBundleAnalyzer from "@next/bundle-analyzer";
 
 initOpenNextCloudflareForDev();
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  experimental: {
+    optimizeCss: true,
+  },
+};
 
 const config =
   process.env.ANALYZE === "true"
