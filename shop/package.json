@@ -15,6 +15,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@medusajs/admin-sdk": "^2.13.4",
     "@medusajs/cli": "^2.13.4",
     "@medusajs/framework": "^2.13.4",
     "@medusajs/medusa": "^2.13.4",
