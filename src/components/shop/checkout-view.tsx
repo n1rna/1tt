@@ -146,6 +146,10 @@ export function CheckoutView() {
   const [selectedShipping, setSelectedShipping] = useState<string | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
 
+  // Available countries from Medusa regions
+  interface RegionCountry { iso_2: string; display_name: string }
+  const [availableCountries, setAvailableCountries] = useState<RegionCountry[]>([]);
+
   // Form fields
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -155,7 +159,7 @@ export function CheckoutView() {
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
-  const [countryCode, setCountryCode] = useState("us");
+  const [countryCode, setCountryCode] = useState("de");
   const [phone, setPhone] = useState("");
 
   const fetchCart = useCallback(async () => {
@@ -185,6 +189,34 @@ export function CheckoutView() {
   }, []);
 
   useEffect(() => { fetchCart(); }, [fetchCart]);
+
+  // Fetch available countries from Medusa regions
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await medusa.store.region.list({ fields: "+countries.*" });
+        const regions = (res as unknown as { regions: { countries: { iso_2: string; display_name: string }[] }[] }).regions ?? [];
+        const countries: RegionCountry[] = [];
+        const seen = new Set<string>();
+        for (const r of regions) {
+          for (const c of r.countries ?? []) {
+            if (!seen.has(c.iso_2)) {
+              seen.add(c.iso_2);
+              countries.push(c);
+            }
+          }
+        }
+        countries.sort((a, b) => a.display_name.localeCompare(b.display_name));
+        setAvailableCountries(countries);
+        if (countries.length > 0 && !countries.find((c) => c.iso_2 === countryCode)) {
+          setCountryCode(countries[0].iso_2);
+        }
+      } catch {
+        // Fallback
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-fill from logged-in user when toggled on
   useEffect(() => {
@@ -529,13 +561,12 @@ export function CheckoutView() {
                   onChange={(e) => setCountryCode(e.target.value)}
                   className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring cursor-pointer"
                 >
-                  <option value="us">United States</option>
-                  <option value="de">Germany</option>
-                  <option value="fr">France</option>
-                  <option value="nl">Netherlands</option>
-                  <option value="gb">United Kingdom</option>
-                  <option value="it">Italy</option>
-                  <option value="es">Spain</option>
+                  {availableCountries.length > 0
+                    ? availableCountries.map((c) => (
+                        <option key={c.iso_2} value={c.iso_2}>{c.display_name}</option>
+                      ))
+                    : <option value={countryCode}>{countryCode.toUpperCase()}</option>
+                  }
                 </select>
               </div>
             </div>
