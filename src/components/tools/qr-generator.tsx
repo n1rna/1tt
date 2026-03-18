@@ -2,9 +2,28 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import QRCode from "qrcode";
-import { Download, Copy, Check, QrCode } from "lucide-react";
+import {
+  Download,
+  Copy,
+  Check,
+  QrCode,
+  Plus,
+  Save,
+  ChevronDown,
+  X,
+  Wifi,
+  Mail,
+  Phone,
+  MessageSquare,
+  User,
+  Link,
+} from "lucide-react";
+import { useSyncedState } from "@/lib/sync";
+import { SyncToggle } from "@/components/ui/sync-toggle";
 import { ToolLayout } from "@/components/layout/tool-layout";
 import { ColorPicker } from "@/components/ui/color-picker";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,9 +66,27 @@ interface PhoneFields {
   phone: string;
 }
 
+// ── Saved QR state ────────────────────────────────────────────────────────────
+
+interface SavedQr {
+  id: string;
+  name: string;
+  inputType: InputType;
+  fields: Record<string, string | boolean>;
+  ecLevel: ErrorCorrection;
+  fgColor: string;
+  bgColor: string;
+  createdAt: number;
+}
+
+const SAVED_QRS_KEY = "1tt-saved-qrs";
+
 // ── QR content builders ──────────────────────────────────────────────────────
 
-function buildContent(type: InputType, fields: Record<string, string | boolean>): string {
+function buildContent(
+  type: InputType,
+  fields: Record<string, string | boolean>
+): string {
   switch (type) {
     case "url": {
       const f = fields as unknown as UrlFields;
@@ -100,9 +137,71 @@ function escapeWifi(s: string): string {
   return s.replace(/[\\\";,:]/g, (c) => "\\" + c);
 }
 
-// ── Input form components ────────────────────────────────────────────────────
+function defaultFieldsForType(
+  type: InputType
+): Record<string, string | boolean> {
+  switch (type) {
+    case "url":
+      return { text: "" };
+    case "wifi":
+      return { ssid: "", password: "", encryption: "WPA", hidden: false };
+    case "vcard":
+      return { name: "", phone: "", email: "", org: "", title: "", url: "" };
+    case "email":
+      return { to: "", subject: "", body: "" };
+    case "sms":
+      return { phone: "", message: "" };
+    case "phone":
+      return { phone: "" };
+  }
+}
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+function nameForQr(
+  type: InputType,
+  fields: Record<string, string | boolean>
+): string {
+  switch (type) {
+    case "url":
+      return (fields.text as string) || "QR Code";
+    case "wifi":
+      return (fields.ssid as string) || "WiFi QR";
+    case "vcard":
+      return (fields.name as string) || "vCard QR";
+    case "email":
+      return (fields.to as string) || "Email QR";
+    case "sms":
+      return (fields.phone as string) || "SMS QR";
+    case "phone":
+      return (fields.phone as string) || "Phone QR";
+  }
+}
+
+function typeIcon(type: InputType) {
+  switch (type) {
+    case "url":
+      return Link;
+    case "wifi":
+      return Wifi;
+    case "vcard":
+      return User;
+    case "email":
+      return Mail;
+    case "sms":
+      return MessageSquare;
+    case "phone":
+      return Phone;
+  }
+}
+
+// ── Input form sub-components ─────────────────────────────────────────────────
+
+function FieldRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
@@ -114,7 +213,7 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 const inputClass =
   "w-full px-3 py-1.5 text-sm rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50";
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "url", label: "Text / URL" },
@@ -125,23 +224,66 @@ const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "phone", label: "Phone" },
 ];
 
-const EC_LEVELS: { value: ErrorCorrection; label: string; description: string }[] = [
+const EC_LEVELS: {
+  value: ErrorCorrection;
+  label: string;
+  description: string;
+}[] = [
   { value: "L", label: "L", description: "~7% recovery" },
   { value: "M", label: "M", description: "~15% recovery" },
   { value: "Q", label: "Q", description: "~25% recovery" },
   { value: "H", label: "H", description: "~30% recovery" },
 ];
 
+const PNG_SIZES = [128, 256, 512, 1024, 2048];
+
+const DISPLAY_SIZE = 256;
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function QrGenerator() {
   const [inputType, setInputType] = useState<InputType>("url");
-  const [fields, setFields] = useState<Record<string, string | boolean>>({ text: "" });
-  const [exportSize, setExportSize] = useState(512);
+  const [fields, setFields] = useState<Record<string, string | boolean>>({
+    text: "",
+  });
   const [ecLevel, setEcLevel] = useState<ErrorCorrection>("M");
   const [fgColor, setFgColor] = useState("#000000");
   const [bgColor, setBgColor] = useState("#ffffff");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeQrId, setActiveQrId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const downloadRef = useRef<HTMLDivElement>(null);
+
+  const {
+    data: savedQrs,
+    setData: setSavedQrs,
+    syncToggleProps,
+  } = useSyncedState<SavedQr[]>(SAVED_QRS_KEY, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        downloadRef.current &&
+        !downloadRef.current.contains(e.target as Node)
+      ) {
+        setDownloadOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [downloadOpen]);
 
   const setField = useCallback((key: string, value: string | boolean) => {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -149,34 +291,13 @@ export function QrGenerator() {
 
   const handleTypeChange = useCallback((type: InputType) => {
     setInputType(type);
-    // Reset fields for new type
-    switch (type) {
-      case "url":
-        setFields({ text: "" });
-        break;
-      case "wifi":
-        setFields({ ssid: "", password: "", encryption: "WPA", hidden: false });
-        break;
-      case "vcard":
-        setFields({ name: "", phone: "", email: "", org: "", title: "", url: "" });
-        break;
-      case "email":
-        setFields({ to: "", subject: "", body: "" });
-        break;
-      case "sms":
-        setFields({ phone: "", message: "" });
-        break;
-      case "phone":
-        setFields({ phone: "" });
-        break;
-    }
+    setFields(defaultFieldsForType(type));
   }, []);
 
   const content = buildContent(inputType, fields);
+  const hasContent = content.trim().length > 0;
 
-  const DISPLAY_SIZE = 256;
-
-  // Render QR to display canvas (fixed size)
+  // Render QR to display canvas (fixed 256px)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -203,31 +324,40 @@ export function QrGenerator() {
       .catch((err) => setError(err.message));
   }, [content, ecLevel, fgColor, bgColor]);
 
-  const downloadPng = useCallback(async () => {
-    if (!content.trim()) return;
-    try {
-      const offscreen = document.createElement("canvas");
-      await QRCode.toCanvas(offscreen, content, {
-        width: exportSize,
-        margin: 2,
-        errorCorrectionLevel: ecLevel,
-        color: { dark: fgColor, light: bgColor },
-      });
-      const link = document.createElement("a");
-      link.download = "qrcode.png";
-      link.href = offscreen.toDataURL("image/png");
-      link.click();
-    } catch {
-      // silently fail
-    }
-  }, [content, exportSize, ecLevel, fgColor, bgColor]);
+  // ── Export helpers ────────────────────────────────────────────────────────
+
+  const downloadPng = useCallback(
+    async (size: number) => {
+      if (!content.trim()) return;
+      setExporting(`png-${size}`);
+      try {
+        const offscreen = document.createElement("canvas");
+        await QRCode.toCanvas(offscreen, content, {
+          width: size,
+          margin: 2,
+          errorCorrectionLevel: ecLevel,
+          color: { dark: fgColor, light: bgColor },
+        });
+        const link = document.createElement("a");
+        link.download = `qrcode-${size}.png`;
+        link.href = offscreen.toDataURL("image/png");
+        link.click();
+      } catch {
+        // silently fail
+      } finally {
+        setExporting(null);
+      }
+    },
+    [content, ecLevel, fgColor, bgColor]
+  );
 
   const downloadSvg = useCallback(async () => {
     if (!content.trim()) return;
+    setExporting("svg");
     try {
       const svg = await QRCode.toString(content, {
         type: "svg",
-        width: exportSize,
+        width: 512,
         margin: 2,
         errorCorrectionLevel: ecLevel,
         color: { dark: fgColor, light: bgColor },
@@ -241,15 +371,17 @@ export function QrGenerator() {
       URL.revokeObjectURL(url);
     } catch {
       // silently fail
+    } finally {
+      setExporting(null);
     }
-  }, [content, exportSize, ecLevel, fgColor, bgColor]);
+  }, [content, ecLevel, fgColor, bgColor]);
 
   const copyToClipboard = useCallback(async () => {
     if (!content.trim()) return;
     try {
       const offscreen = document.createElement("canvas");
       await QRCode.toCanvas(offscreen, content, {
-        width: exportSize,
+        width: 512,
         margin: 2,
         errorCorrectionLevel: ecLevel,
         color: { dark: fgColor, light: bgColor },
@@ -265,14 +397,178 @@ export function QrGenerator() {
     } catch {
       // silently fail
     }
-  }, [content, exportSize, ecLevel, fgColor, bgColor]);
+  }, [content, ecLevel, fgColor, bgColor]);
 
-  const hasContent = content.trim().length > 0;
+  // ── Save / Load / Delete ──────────────────────────────────────────────────
+
+  const handleSaveQr = useCallback(() => {
+    if (activeQrId) {
+      // Update existing
+      const autoName = nameForQr(inputType, fields);
+      setSavedQrs((prev) =>
+        prev.map((q) =>
+          q.id === activeQrId
+            ? {
+                ...q,
+                name: autoName,
+                inputType,
+                fields,
+                ecLevel,
+                fgColor,
+                bgColor,
+              }
+            : q
+        )
+      );
+    } else {
+      // Open save dialog for new QR
+      setSaveName(nameForQr(inputType, fields));
+      setSaveDialogOpen(true);
+    }
+  }, [
+    activeQrId,
+    inputType,
+    fields,
+    ecLevel,
+    fgColor,
+    bgColor,
+    setSavedQrs,
+  ]);
+
+  const confirmSaveNew = useCallback(() => {
+    const autoName = nameForQr(inputType, fields);
+    const id = crypto.randomUUID();
+    const saved: SavedQr = {
+      id,
+      name: saveName.trim() || autoName,
+      inputType,
+      fields,
+      ecLevel,
+      fgColor,
+      bgColor,
+      createdAt: Date.now(),
+    };
+    setSavedQrs((prev) => [saved, ...prev]);
+    setActiveQrId(id);
+    setSaveDialogOpen(false);
+  }, [saveName, inputType, fields, ecLevel, fgColor, bgColor, setSavedQrs]);
+
+  const handleLoadQr = useCallback((saved: SavedQr) => {
+    setInputType(saved.inputType);
+    setFields(saved.fields);
+    setEcLevel(saved.ecLevel);
+    setFgColor(saved.fgColor);
+    setBgColor(saved.bgColor);
+    setActiveQrId(saved.id);
+  }, []);
+
+  const handleDeleteQr = useCallback(
+    (id: string) => {
+      setSavedQrs((prev) => prev.filter((q) => q.id !== id));
+      if (activeQrId === id) {
+        setActiveQrId(null);
+      }
+    },
+    [setSavedQrs, activeQrId]
+  );
+
+  const handleNewQr = useCallback(() => {
+    setInputType("url");
+    setFields({ text: "" });
+    setEcLevel("M");
+    setFgColor("#000000");
+    setBgColor("#ffffff");
+    setActiveQrId(null);
+  }, []);
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────
+
+  const toolbar = (
+    <div className="flex items-center gap-1">
+      {activeQrId && (
+        <button
+          onClick={handleNewQr}
+          className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors"
+          title="Create a new QR code"
+        >
+          <Plus className="h-3.5 w-3.5" /> New
+        </button>
+      )}
+      <button
+        onClick={handleSaveQr}
+        className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors"
+        title={activeQrId ? "Update saved QR code" : "Save as new QR code"}
+      >
+        <Save className="h-3.5 w-3.5" />
+        {activeQrId ? "Save" : "Save New"}
+      </button>
+      <button
+        onClick={copyToClipboard}
+        disabled={!hasContent}
+        className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Copy QR code to clipboard"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+        {copied ? "Copied!" : "Copy"}
+      </button>
+      <div ref={downloadRef} className="relative">
+        <button
+          onClick={() => setDownloadOpen((v) => !v)}
+          disabled={!hasContent}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Download className="h-3.5 w-3.5" /> Export{" "}
+          <ChevronDown className="h-3 w-3" />
+        </button>
+        {downloadOpen && (
+          <div className="absolute right-0 top-full mt-1 z-50 w-44 rounded-lg border bg-popover p-1.5 shadow-lg">
+            <button
+              onClick={() => {
+                downloadSvg();
+                setDownloadOpen(false);
+              }}
+              disabled={exporting === "svg"}
+              className="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" /> Download SVG
+            </button>
+            <div className="my-1 h-px bg-border" />
+            <div className="px-2.5 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              PNG
+            </div>
+            {PNG_SIZES.map((size) => (
+              <button
+                key={size}
+                onClick={() => {
+                  downloadPng(size);
+                  setDownloadOpen(false);
+                }}
+                disabled={exporting === `png-${size}`}
+                className="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-xs hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <Download className="h-3 w-3" /> {size}px
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <ToolLayout slug="qr">
+    <ToolLayout
+      slug="qr"
+      sync={<SyncToggle {...syncToggleProps} />}
+      toolbar={toolbar}
+    >
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left: inputs */}
+        {/* ── Left: inputs + customization ── */}
         <div className="flex-1 min-w-0 space-y-5">
           {/* Input type tabs */}
           <div>
@@ -329,19 +625,21 @@ export function QrGenerator() {
                 </FieldRow>
                 <FieldRow label="Encryption">
                   <div className="flex gap-1 border rounded-lg p-0.5 w-fit">
-                    {(["WPA", "WEP", "nopass"] as WifiEncryption[]).map((enc) => (
-                      <button
-                        key={enc}
-                        onClick={() => setField("encryption", enc)}
-                        className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                          fields.encryption === enc
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {enc === "nopass" ? "None" : enc}
-                      </button>
-                    ))}
+                    {(["WPA", "WEP", "nopass"] as WifiEncryption[]).map(
+                      (enc) => (
+                        <button
+                          key={enc}
+                          onClick={() => setField("encryption", enc)}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                            fields.encryption === enc
+                              ? "bg-foreground text-background"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {enc === "nopass" ? "None" : enc}
+                        </button>
+                      )
+                    )}
                   </div>
                 </FieldRow>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -351,7 +649,9 @@ export function QrGenerator() {
                     onChange={(e) => setField("hidden", e.target.checked)}
                     className="rounded"
                   />
-                  <span className="text-xs text-muted-foreground">Hidden network</span>
+                  <span className="text-xs text-muted-foreground">
+                    Hidden network
+                  </span>
                 </label>
               </>
             )}
@@ -359,24 +659,60 @@ export function QrGenerator() {
             {inputType === "vcard" && (
               <>
                 <FieldRow label="Full Name">
-                  <input type="text" value={(fields.name as string) ?? ""} onChange={(e) => setField("name", e.target.value)} placeholder="Jane Smith" className={inputClass} />
+                  <input
+                    type="text"
+                    value={(fields.name as string) ?? ""}
+                    onChange={(e) => setField("name", e.target.value)}
+                    placeholder="Jane Smith"
+                    className={inputClass}
+                  />
                 </FieldRow>
                 <div className="grid grid-cols-2 gap-3">
                   <FieldRow label="Phone">
-                    <input type="tel" value={(fields.phone as string) ?? ""} onChange={(e) => setField("phone", e.target.value)} placeholder="+1 555 000 0000" className={inputClass} />
+                    <input
+                      type="tel"
+                      value={(fields.phone as string) ?? ""}
+                      onChange={(e) => setField("phone", e.target.value)}
+                      placeholder="+1 555 000 0000"
+                      className={inputClass}
+                    />
                   </FieldRow>
                   <FieldRow label="Email">
-                    <input type="email" value={(fields.email as string) ?? ""} onChange={(e) => setField("email", e.target.value)} placeholder="jane@example.com" className={inputClass} />
+                    <input
+                      type="email"
+                      value={(fields.email as string) ?? ""}
+                      onChange={(e) => setField("email", e.target.value)}
+                      placeholder="jane@example.com"
+                      className={inputClass}
+                    />
                   </FieldRow>
                   <FieldRow label="Organization">
-                    <input type="text" value={(fields.org as string) ?? ""} onChange={(e) => setField("org", e.target.value)} placeholder="Acme Corp" className={inputClass} />
+                    <input
+                      type="text"
+                      value={(fields.org as string) ?? ""}
+                      onChange={(e) => setField("org", e.target.value)}
+                      placeholder="Acme Corp"
+                      className={inputClass}
+                    />
                   </FieldRow>
                   <FieldRow label="Title">
-                    <input type="text" value={(fields.title as string) ?? ""} onChange={(e) => setField("title", e.target.value)} placeholder="Engineer" className={inputClass} />
+                    <input
+                      type="text"
+                      value={(fields.title as string) ?? ""}
+                      onChange={(e) => setField("title", e.target.value)}
+                      placeholder="Engineer"
+                      className={inputClass}
+                    />
                   </FieldRow>
                 </div>
                 <FieldRow label="Website">
-                  <input type="url" value={(fields.url as string) ?? ""} onChange={(e) => setField("url", e.target.value)} placeholder="https://jane.dev" className={inputClass} />
+                  <input
+                    type="url"
+                    value={(fields.url as string) ?? ""}
+                    onChange={(e) => setField("url", e.target.value)}
+                    placeholder="https://jane.dev"
+                    className={inputClass}
+                  />
                 </FieldRow>
               </>
             )}
@@ -384,13 +720,31 @@ export function QrGenerator() {
             {inputType === "email" && (
               <>
                 <FieldRow label="To">
-                  <input type="email" value={(fields.to as string) ?? ""} onChange={(e) => setField("to", e.target.value)} placeholder="recipient@example.com" className={inputClass} />
+                  <input
+                    type="email"
+                    value={(fields.to as string) ?? ""}
+                    onChange={(e) => setField("to", e.target.value)}
+                    placeholder="recipient@example.com"
+                    className={inputClass}
+                  />
                 </FieldRow>
                 <FieldRow label="Subject">
-                  <input type="text" value={(fields.subject as string) ?? ""} onChange={(e) => setField("subject", e.target.value)} placeholder="Hello" className={inputClass} />
+                  <input
+                    type="text"
+                    value={(fields.subject as string) ?? ""}
+                    onChange={(e) => setField("subject", e.target.value)}
+                    placeholder="Hello"
+                    className={inputClass}
+                  />
                 </FieldRow>
                 <FieldRow label="Body">
-                  <textarea value={(fields.body as string) ?? ""} onChange={(e) => setField("body", e.target.value)} placeholder="Message body..." rows={3} className={`${inputClass} resize-y`} />
+                  <textarea
+                    value={(fields.body as string) ?? ""}
+                    onChange={(e) => setField("body", e.target.value)}
+                    placeholder="Message body..."
+                    rows={3}
+                    className={`${inputClass} resize-y`}
+                  />
                 </FieldRow>
               </>
             )}
@@ -398,45 +752,50 @@ export function QrGenerator() {
             {inputType === "sms" && (
               <>
                 <FieldRow label="Phone Number">
-                  <input type="tel" value={(fields.phone as string) ?? ""} onChange={(e) => setField("phone", e.target.value)} placeholder="+1 555 000 0000" className={inputClass} />
+                  <input
+                    type="tel"
+                    value={(fields.phone as string) ?? ""}
+                    onChange={(e) => setField("phone", e.target.value)}
+                    placeholder="+1 555 000 0000"
+                    className={inputClass}
+                  />
                 </FieldRow>
                 <FieldRow label="Message">
-                  <textarea value={(fields.message as string) ?? ""} onChange={(e) => setField("message", e.target.value)} placeholder="Your message..." rows={3} className={`${inputClass} resize-y`} />
+                  <textarea
+                    value={(fields.message as string) ?? ""}
+                    onChange={(e) => setField("message", e.target.value)}
+                    placeholder="Your message..."
+                    rows={3}
+                    className={`${inputClass} resize-y`}
+                  />
                 </FieldRow>
               </>
             )}
 
             {inputType === "phone" && (
               <FieldRow label="Phone Number">
-                <input type="tel" value={(fields.phone as string) ?? ""} onChange={(e) => setField("phone", e.target.value)} placeholder="+1 555 000 0000" className={inputClass} />
+                <input
+                  type="tel"
+                  value={(fields.phone as string) ?? ""}
+                  onChange={(e) => setField("phone", e.target.value)}
+                  placeholder="+1 555 000 0000"
+                  className={inputClass}
+                />
               </FieldRow>
             )}
           </div>
 
           {/* Customization */}
           <div className="space-y-4 pt-2 border-t">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customization</p>
-
-            {/* Export size */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground">Export Size</label>
-                <span className="text-xs font-mono text-muted-foreground">{exportSize}px</span>
-              </div>
-              <input
-                type="range"
-                min={128}
-                max={2048}
-                step={128}
-                value={exportSize}
-                onChange={(e) => setExportSize(Number(e.target.value))}
-                className="w-full accent-foreground"
-              />
-            </div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Customization
+            </p>
 
             {/* Error correction */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Error Correction</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Error Correction
+              </label>
               <div className="flex gap-1">
                 {EC_LEVELS.map((ec) => (
                   <button
@@ -461,18 +820,79 @@ export function QrGenerator() {
             {/* Colors */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Foreground</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Foreground
+                </label>
                 <ColorPicker value={fgColor} onChange={setFgColor} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Background</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Background
+                </label>
                 <ColorPicker value={bgColor} onChange={setBgColor} />
               </div>
             </div>
           </div>
+
+          {/* ── Saved QR Codes ── */}
+          {mounted && savedQrs.length > 0 && (
+            <div className="space-y-3 pt-2 border-t">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Saved QR Codes
+              </p>
+              <div className="space-y-1.5">
+                {savedQrs.map((saved) => {
+                  const Icon = typeIcon(saved.inputType);
+                  return (
+                    <div
+                      key={saved.id}
+                      className="flex items-center gap-2 group"
+                    >
+                      <button
+                        onClick={() => handleLoadQr(saved)}
+                        className={`flex items-center gap-2 flex-1 min-w-0 rounded-md border p-1.5 transition-colors ${
+                          activeQrId === saved.id
+                            ? "border-ring bg-muted/50"
+                            : "border-border/50 hover:border-ring"
+                        }`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded shrink-0 flex items-center justify-center"
+                          style={{
+                            backgroundColor: saved.bgColor,
+                            color: saved.fgColor,
+                          }}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="text-xs font-medium truncate">
+                            {saved.name}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground capitalize">
+                            {INPUT_TYPES.find(
+                              (t) => t.value === saved.inputType
+                            )?.label ?? saved.inputType}{" "}
+                            · EC {saved.ecLevel}
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteQr(saved.id)}
+                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-all shrink-0"
+                        title="Delete saved QR code"
+                      >
+                        <X className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right: QR preview */}
+        {/* ── Right: QR preview ── */}
         <div className="lg:w-72 flex flex-col items-center gap-4">
           <div className="w-full flex items-center justify-center p-4 rounded-xl border bg-muted/10 min-h-[280px]">
             {hasContent ? (
@@ -493,35 +913,49 @@ export function QrGenerator() {
             <p className="text-xs text-destructive text-center">{error}</p>
           )}
 
-          {/* Action buttons */}
-          <div className="w-full flex flex-col gap-2">
-            <button
-              onClick={downloadPng}
-              disabled={!hasContent}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              Download PNG
-            </button>
-            <button
-              onClick={downloadSvg}
-              disabled={!hasContent}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <Download className="h-4 w-4" />
-              Download SVG
-            </button>
-            <button
-              onClick={copyToClipboard}
-              disabled={!hasContent}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy to Clipboard"}
-            </button>
-          </div>
+          {/* Copy button */}
+          <button
+            onClick={copyToClipboard}
+            disabled={!hasContent}
+            className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {copied ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            {copied ? "Copied" : "Copy to Clipboard"}
+          </button>
         </div>
       </div>
+      {/* Save dialog */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save QR Code</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-xs font-medium text-muted-foreground">Name</label>
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmSaveNew(); }}
+              placeholder="My QR code"
+              autoFocus
+              className="w-full px-3 py-2 text-sm rounded-md border bg-transparent focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={confirmSaveNew}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ToolLayout>
   );
 }
