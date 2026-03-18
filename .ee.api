@@ -183,6 +183,19 @@
 				"type": "string",
 				"default": "default",
 				"required": false
+			},
+			"UPSTASH_EMAIL": {
+				"name": "UPSTASH_EMAIL",
+				"title": "Upstash account email for Redis provisioning",
+				"type": "string",
+				"required": true
+			},
+			"UPSTASH_API_KEY": {
+				"name": "UPSTASH_API_KEY",
+				"title": "Upstash Management API key",
+				"type": "string",
+				"required": true,
+				"secret": true
 			}
 		}
 	},

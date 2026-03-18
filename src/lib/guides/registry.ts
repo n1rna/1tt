@@ -139,6 +139,25 @@ export const guides: GuideDefinition[] = [
       "context window",
     ],
   },
+  {
+    slug: "redis-studio",
+    title: "Hosted Redis with Upstash",
+    description:
+      "Create hosted Redis databases in seconds and manage them from the browser — browse keys, inspect values, set TTLs, and run commands.",
+    icon: "Database",
+    relatedTools: ["elasticsearch", "sqlite"],
+    keywords: [
+      "redis",
+      "upstash",
+      "redis gui",
+      "redis browser",
+      "key value store",
+      "redis studio",
+      "hosted redis",
+      "redis client",
+      "redis commands",
+    ],
+  },
 ];
 
 export function getGuideBySlug(slug: string): GuideDefinition | undefined {

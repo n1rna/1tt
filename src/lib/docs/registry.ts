@@ -28,4 +28,11 @@ export const docs: DocDefinition[] = [
     icon: "Image",
     toolSlug: "og",
   },
+  {
+    slug: "redis",
+    title: "Redis Studio",
+    description:
+      "Create hosted Redis databases, browse keys, inspect values, manage TTLs, and run commands",
+    icon: "Database",
+  },
 ];

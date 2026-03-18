@@ -15,6 +15,12 @@ import {
   deleteHostedSqliteDb,
   type HostedSqliteDB,
 } from "@/lib/hosted-sqlite";
+import {
+  useRedis,
+  createRedis,
+  deleteRedis,
+  type UserRedis,
+} from "@/lib/redis";
 import { ConnectionDialog } from "@/components/account/connection-dialog";
 import { ApiInfoDialog } from "@/components/account/hosted-sqlite-api-dialog";
 import { Button } from "@/components/ui/button";
@@ -54,13 +60,24 @@ const REGIONS: { value: string; label: string }[] = [
   { value: "aws-ap-southeast-1", label: "Asia Pacific (Singapore)" },
 ];
 
+const REDIS_REGIONS: { value: string; label: string }[] = [
+  { value: "us-east-1", label: "US East (N. Virginia)" },
+  { value: "us-west-1", label: "US West (N. California)" },
+  { value: "us-west-2", label: "US West (Oregon)" },
+  { value: "eu-central-1", label: "EU Central (Frankfurt)" },
+  { value: "eu-west-1", label: "EU West (Ireland)" },
+  { value: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+  { value: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+];
+
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // ── Types ──────────────────────────────────────────
 
 type UnifiedDb =
   | { type: "neon"; id: string; name: string; region: string; status: string; createdAt: string }
-  | { type: "sqlite"; db: HostedSqliteDB };
+  | { type: "sqlite"; db: HostedSqliteDB }
+  | { type: "redis"; db: UserRedis };
 
 // ── Helpers ────────────────────────────────────────
 
@@ -83,11 +100,17 @@ function nameFromFile(filename: string): string {
 }
 
 function regionLabel(value: string): string {
-  return REGIONS.find((r) => r.value === value)?.label ?? value;
+  return (
+    REGIONS.find((r) => r.value === value)?.label ??
+    REDIS_REGIONS.find((r) => r.value === value)?.label ??
+    value
+  );
 }
 
 function getCreatedAt(item: UnifiedDb): string {
-  return item.type === "neon" ? item.createdAt : item.db.createdAt;
+  if (item.type === "neon") return item.createdAt;
+  if (item.type === "sqlite") return item.db.createdAt;
+  return item.db.createdAt;
 }
 
 // ── Sub-components ─────────────────────────────────
@@ -125,11 +148,18 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-function TypeBadge({ type }: { type: "neon" | "sqlite" }) {
+function TypeBadge({ type }: { type: "neon" | "sqlite" | "redis" }) {
   if (type === "neon") {
     return (
       <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 shrink-0">
         Postgres
+      </span>
+    );
+  }
+  if (type === "redis") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 shrink-0">
+        Redis
       </span>
     );
   }
@@ -411,6 +441,185 @@ function SqliteDatabaseCard({
   );
 }
 
+// ── Redis Database Card ────────────────────────────
+
+function RedisDatabaseCard({
+  db,
+  onDeleted,
+}: {
+  db: UserRedis;
+  onDeleted: () => void;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteRedis(db.id);
+      setDeleteOpen(false);
+      onDeleted();
+    } catch {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={`/account/redis/${db.id}`}
+          className="flex items-center gap-3 min-w-0 flex-1 group"
+        >
+          <Database className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium truncate group-hover:underline underline-offset-2">
+                {db.name}
+              </p>
+              <TypeBadge type="redis" />
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Globe className="h-3 w-3" />
+                {regionLabel(db.region)}
+              </span>
+              <span className="text-muted-foreground/40 text-xs">·</span>
+              <span className="text-xs text-muted-foreground">
+                {formatDate(db.createdAt)}
+              </span>
+            </div>
+          </div>
+        </Link>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <StatusDot status={db.status} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={deleting}
+            title="Delete Redis instance"
+          >
+            {deleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
+      </div>
+      <DeleteDatabaseDialog
+        dbName={db.name}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+        deleting={deleting}
+      />
+    </div>
+  );
+}
+
+// ── Create Redis Dialog ────────────────────────────
+
+function CreateRedisDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [region, setRegion] = useState("us-east-1");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await createRedis(name.trim(), region);
+      setOpen(false);
+      setName("");
+      setRegion("us-east-1");
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create Redis instance");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        New Redis
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Redis Database</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="redis-name">Name</Label>
+              <Input
+                id="redis-name"
+                placeholder="my-cache"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreate();
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="redis-region">Region</Label>
+              <Select
+                value={region}
+                onValueChange={(v) => {
+                  if (v !== null) setRegion(v);
+                }}
+              >
+                <SelectTrigger id="redis-region">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REDIS_REGIONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {error && (
+              <p className="text-sm text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {error}
+              </p>
+            )}
+            <Button
+              className="w-full gap-2"
+              onClick={() => void handleCreate()}
+              disabled={creating || !name.trim()}
+            >
+              {creating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              {creating ? "Creating…" : "Create Redis"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ── Create Postgres Dialog ─────────────────────────
 
 function CreatePostgresDialog({ onCreated }: { onCreated: () => void }) {
@@ -674,23 +883,26 @@ function DatabaseDashboardInner() {
   const { data: session } = useSession();
   const { data: neonDbs, loading: neonLoading, error: neonError, refetch: refetchNeon } = useDatabases();
   const { data: sqliteDbs, loading: sqliteLoading, error: sqliteError, refetch: refetchSqlite } = useHostedSqliteDbs();
+  const { data: redisDbs, loading: redisLoading, error: redisError, refetch: refetchRedis } = useRedis();
   const { data: billing, loading: billingLoading } = useBillingStatus();
   const [pendingApiDb, setPendingApiDb] = useState<HostedSqliteDB | null>(null);
 
-  const loading = neonLoading || sqliteLoading;
-  const error = neonError ?? sqliteError ?? null;
+  const loading = neonLoading || sqliteLoading || redisLoading;
+  const error = neonError ?? sqliteError ?? redisError ?? null;
   const isPaidPlan = billing != null && billing.plan !== "free";
   const billingResolved = !billingLoading && billing != null;
 
   const refetchAll = () => {
     void refetchNeon();
     void refetchSqlite();
+    void refetchRedis();
   };
 
   // Build and sort unified list
   const unified: UnifiedDb[] = [
     ...(neonDbs ?? []).map((db): UnifiedDb => ({ type: "neon", ...db })),
     ...(sqliteDbs ?? []).map((db): UnifiedDb => ({ type: "sqlite", db })),
+    ...(redisDbs ?? []).map((db): UnifiedDb => ({ type: "redis", db })),
   ].sort(
     (a, b) =>
       new Date(getCreatedAt(b)).getTime() - new Date(getCreatedAt(a)).getTime()
@@ -710,13 +922,14 @@ function DatabaseDashboardInner() {
         <div>
           <h1 className="text-lg font-semibold">Databases</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your Postgres and SQLite databases.
+            Manage your Postgres, SQLite, and Redis databases.
           </p>
         </div>
         {!loading && !error && (
           <div className="flex items-center gap-2">
             <CreatePostgresDialog onCreated={refetchAll} />
             <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
+            <CreateRedisDialog onCreated={refetchAll} />
           </div>
         )}
       </div>
@@ -788,6 +1001,7 @@ function DatabaseDashboardInner() {
           <div className="flex items-center gap-2">
             <CreatePostgresDialog onCreated={refetchAll} />
             <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
+            <CreateRedisDialog onCreated={refetchAll} />
           </div>
         </div>
       )}
@@ -800,6 +1014,12 @@ function DatabaseDashboardInner() {
               <NeonDatabaseCard
                 key={`neon-${item.id}`}
                 db={item}
+                onDeleted={refetchAll}
+              />
+            ) : item.type === "redis" ? (
+              <RedisDatabaseCard
+                key={`redis-${item.db.id}`}
+                db={item.db}
                 onDeleted={refetchAll}
               />
             ) : (

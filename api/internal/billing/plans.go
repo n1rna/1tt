@@ -9,14 +9,15 @@ type PlanLimits struct {
 	DatabasesMax     int   // max Postgres databases
 	SqliteDbsMax     int   // max hosted SQLite databases
 	SqliteMaxSizeMB  int64 // max upload size per SQLite file in MB
+	RedisMax         int   // max Upstash Redis databases
 	OverageEnabled   bool
 }
 
 // Plans maps plan tier names to their limits.
 var Plans = map[string]PlanLimits{
-	"free": {PastesPerMonth: 5, OgViewsPerMonth: 1000, AiTokensPerMonth: 0, OgCollections: 1, DatabasesMax: 0, SqliteDbsMax: 0, SqliteMaxSizeMB: 0, OverageEnabled: false},
-	"pro":  {PastesPerMonth: 100, OgViewsPerMonth: 10000, AiTokensPerMonth: 100000, OgCollections: 10, DatabasesMax: 1, SqliteDbsMax: 3, SqliteMaxSizeMB: 10, OverageEnabled: true},
-	"max":  {PastesPerMonth: 500, OgViewsPerMonth: 50000, AiTokensPerMonth: 500000, OgCollections: -1, DatabasesMax: 3, SqliteDbsMax: 10, SqliteMaxSizeMB: 50, OverageEnabled: true},
+	"free": {PastesPerMonth: 5, OgViewsPerMonth: 1000, AiTokensPerMonth: 0, OgCollections: 1, DatabasesMax: 0, SqliteDbsMax: 0, SqliteMaxSizeMB: 0, RedisMax: 0, OverageEnabled: false},
+	"pro":  {PastesPerMonth: 100, OgViewsPerMonth: 10000, AiTokensPerMonth: 100000, OgCollections: 10, DatabasesMax: 1, SqliteDbsMax: 3, SqliteMaxSizeMB: 10, RedisMax: 1, OverageEnabled: true},
+	"max":  {PastesPerMonth: 500, OgViewsPerMonth: 50000, AiTokensPerMonth: 500000, OgCollections: -1, DatabasesMax: 3, SqliteDbsMax: 10, SqliteMaxSizeMB: 50, RedisMax: 3, OverageEnabled: true},
 }
 
 // MeterLimit returns the monthly limit for a given tier and meter slug.

@@ -23,6 +23,7 @@ import (
 	"github.com/n1rna/1tt/api/internal/neon"
 	"github.com/n1rna/1tt/api/internal/storage"
 	"github.com/n1rna/1tt/api/internal/turso"
+	"github.com/n1rna/1tt/api/internal/upstash"
 )
 
 func main() {
@@ -80,6 +81,15 @@ func main() {
 		log.Printf("INFO: Turso client initialised (org: %s, group: %s)", cfg.TursoOrgSlug, cfg.TursoGroup)
 	} else {
 		log.Printf("WARNING: Turso not configured (missing TURSO_API_TOKEN — SQLite hosting will be unavailable)")
+	}
+
+	// Upstash Redis — requires UPSTASH_EMAIL and UPSTASH_API_KEY.
+	var upstashClient *upstash.Client
+	if cfg.UpstashEmail != "" && cfg.UpstashAPIKey != "" {
+		upstashClient = upstash.NewClient(cfg.UpstashEmail, cfg.UpstashAPIKey)
+		log.Printf("INFO: Upstash client initialised (email: %s)", cfg.UpstashEmail)
+	} else {
+		log.Printf("WARNING: Upstash not configured (missing UPSTASH_EMAIL or UPSTASH_API_KEY — Redis hosting will be unavailable)")
 	}
 
 	r := chi.NewRouter()
@@ -189,6 +199,16 @@ func main() {
 				r.Get("/sqlite", handler.ListSqliteDBs(db))
 				r.Get("/sqlite/{id}", handler.GetSqliteDB(db))
 				r.Delete("/sqlite/{id}", handler.DeleteSqliteDB(db, tursoClient))
+			}
+			// Redis routes — session-authenticated management and proxy routes.
+			if db != nil {
+				r.Post("/redis", handler.CreateRedis(db, upstashClient, billingClient))
+				r.Get("/redis", handler.ListRedis(db))
+				r.Get("/redis/{id}", handler.GetRedis(db))
+				r.Delete("/redis/{id}", handler.DeleteRedis(db, upstashClient))
+				r.Post("/redis/{id}/command", handler.ProxyCommand(db, upstashClient))
+				r.Post("/redis/{id}/pipeline", handler.ProxyPipeline(db, upstashClient))
+				r.Get("/redis/{id}/info", handler.GetRedisInfo(db, upstashClient))
 			}
 			// AI query generation (SQL, Elasticsearch, etc.)
 			if db != nil {

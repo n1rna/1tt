@@ -46,6 +46,10 @@ type Config struct {
 	TursoAPIToken string // TURSO_API_TOKEN
 	TursoOrgSlug  string // TURSO_ORG_SLUG
 	TursoGroup    string // TURSO_GROUP (default: "default")
+
+	// Upstash Redis
+	UpstashEmail  string // UPSTASH_EMAIL
+	UpstashAPIKey string // UPSTASH_API_KEY
 }
 
 func getEnvOrDefault(key, fallback string) string {
@@ -100,5 +104,8 @@ func Load() *Config {
 		TursoAPIToken: os.Getenv("TURSO_API_TOKEN"),
 		TursoOrgSlug:  os.Getenv("TURSO_ORG_SLUG"),
 		TursoGroup:    getEnvOrDefault("TURSO_GROUP", "default"),
+
+		UpstashEmail:  os.Getenv("UPSTASH_EMAIL"),
+		UpstashAPIKey: os.Getenv("UPSTASH_API_KEY"),
 	}
 }
