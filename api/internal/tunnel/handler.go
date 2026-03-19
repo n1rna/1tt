@@ -52,18 +52,24 @@ func HandleCreateToken(hub *TunnelHub) http.HandlerFunc {
 
 		token := hub.CreateToken(userID)
 
-		// Build the WebSocket URL. In production, the public API base URL is
-		// set via TUNNEL_PUBLIC_URL env var. For local dev, derive from request.
+		// Build the WebSocket URL.
+		// TUNNEL_PUBLIC_URL is the full base URL including the path prefix.
+		// In production: "wss://1tt.dev/ws/tunnel" (worker-entry adds /ws suffix)
+		// For local dev: derived as "ws://localhost:PORT/api/v1/tunnel" (direct)
 		publicBase := os.Getenv("TUNNEL_PUBLIC_URL")
-		if publicBase == "" {
-			// Local dev fallback: derive from request
+		var wsURL string
+		if publicBase != "" {
+			// Production: worker-entry maps /ws/tunnel/{token} → /api/v1/tunnel/{token}/ws
+			// So we only append /{token} here (no /ws — the proxy adds it)
+			wsURL = fmt.Sprintf("%s/%s", publicBase, token)
+		} else {
+			// Local dev: connect directly to the Go server
 			scheme := "ws"
 			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 				scheme = "wss"
 			}
-			publicBase = fmt.Sprintf("%s://%s/api/v1/tunnel", scheme, r.Host)
+			wsURL = fmt.Sprintf("%s://%s/api/v1/tunnel/%s/ws", scheme, r.Host, token)
 		}
-		wsURL := fmt.Sprintf("%s/%s/ws", publicBase, token)
 		writeJSON(w, http.StatusOK, createTokenResponse{Token: token, WSURL: wsURL})
 	}
 }

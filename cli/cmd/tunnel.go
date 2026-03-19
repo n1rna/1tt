@@ -47,7 +47,7 @@ Examples:
 func init() {
 	tunnelCmd.Flags().StringVar(&flagToken, "token", "", "Authentication token from 1tt.dev (required)")
 	tunnelCmd.Flags().StringVar(&flagDB, "db", "", "Database connection string (required)")
-	tunnelCmd.Flags().StringVar(&flagServer, "server", "wss://api.1tt.dev/api/v1/tunnel", "WebSocket server URL")
+	tunnelCmd.Flags().StringVar(&flagServer, "server", "wss://1tt.dev/ws/tunnel", "WebSocket server URL")
 
 	_ = tunnelCmd.MarkFlagRequired("token")
 	_ = tunnelCmd.MarkFlagRequired("db")
@@ -149,7 +149,16 @@ func runTunnel(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// --- Open WebSocket ---
-	serverURL := strings.TrimRight(flagServer, "/") + "/" + flagToken + "/ws"
+	// Build WebSocket URL. In production (wss://1tt.dev/ws/tunnel), the worker-entry
+	// proxy adds the /ws suffix. For local dev (ws://localhost:8090/api/v1/tunnel),
+	// we need to add /ws ourselves.
+	base := strings.TrimRight(flagServer, "/")
+	serverURL := base + "/" + flagToken
+	if strings.Contains(base, "/api/v1/") {
+		// Direct connection to Go backend — needs /ws suffix
+		serverURL += "/ws"
+	}
+	// Production via worker-entry — /ws/tunnel/{token} maps to /api/v1/tunnel/{token}/ws
 	fmt.Printf("  %s Connecting to 1tt.dev tunnel server...\n", color(colorYellow, "→"))
 
 	var wsClient *ws.Client

@@ -107,8 +107,10 @@ export function TunnelConnectDialog({
   const { cliCommand, oneLiner } = (() => {
     if (!tunnel) return { cliCommand: "", oneLiner: "" };
     const wsUrl = tunnel.ws_url;
-    const serverBase = wsUrl.replace(/\/[^/]+\/ws$/, "");
-    const isDefault = serverBase === "wss://api.1tt.dev/api/v1/tunnel";
+    // Extract the server base: strip the /{token} or /{token}/ws suffix
+    const tokenIdx = wsUrl.indexOf(tunnel.token);
+    const serverBase = tokenIdx > 0 ? wsUrl.slice(0, tokenIdx - 1) : wsUrl;
+    const isDefault = serverBase === "wss://1tt.dev/ws/tunnel";
     const serverFlag = isDefault ? "" : ` --server ${serverBase}`;
     const tunnelArgs = `tunnel --token ${tunnel.token}${serverFlag} --db <YOUR_CONNECTION_STRING>`;
     return {
