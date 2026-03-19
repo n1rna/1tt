@@ -122,7 +122,12 @@ export function TunnelConnectDialog({
   const handleOpenStudio = () => {
     if (!tunnel) return;
     onOpenChange(false);
-    router.push(`/account/databases/tunnel/${tunnel.token}`);
+    // Route to the correct studio based on dialect
+    if (dialect === "redis") {
+      router.push(`/account/redis/tunnel/${tunnel.token}`);
+    } else {
+      router.push(`/account/databases/tunnel/${tunnel.token}`);
+    }
   };
 
   return (
