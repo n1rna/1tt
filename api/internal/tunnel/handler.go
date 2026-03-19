@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -51,42 +52,18 @@ func HandleCreateToken(hub *TunnelHub) http.HandlerFunc {
 
 		token := hub.CreateToken(userID)
 
-		// Derive WebSocket URL from request headers. Behind Cloudflare Workers /
-		// reverse proxies, r.Host is the internal container host (localhost:8080),
-		// so we prefer X-Forwarded-Host, Origin, or Referer for the public host.
-		scheme := "wss"
-		host := r.Host
-
-		// Check forwarded headers for the real host
-		if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
-			host = fh
-		} else if origin := r.Header.Get("Origin"); origin != "" {
-			// Origin is like "https://1tt.dev" — extract host and scheme
-			if len(origin) > 8 {
-				if origin[:8] == "https://" {
-					host = origin[8:]
-					scheme = "wss"
-				} else if origin[:7] == "http://" {
-					host = origin[7:]
-					scheme = "ws"
-				}
-			}
-			// The API host is different from the origin — derive it
-			if host == "1tt.dev" || host == "www.1tt.dev" {
-				host = "api.1tt.dev"
-			}
-		}
-
-		// For local dev: if host is still localhost, use ws://
-		if host == r.Host && r.TLS == nil {
-			if proto := r.Header.Get("X-Forwarded-Proto"); proto == "https" {
+		// Build the WebSocket URL. In production, the public API base URL is
+		// set via TUNNEL_PUBLIC_URL env var. For local dev, derive from request.
+		publicBase := os.Getenv("TUNNEL_PUBLIC_URL")
+		if publicBase == "" {
+			// Local dev fallback: derive from request
+			scheme := "ws"
+			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 				scheme = "wss"
-			} else {
-				scheme = "ws"
 			}
+			publicBase = fmt.Sprintf("%s://%s/api/v1/tunnel", scheme, r.Host)
 		}
-
-		wsURL := fmt.Sprintf("%s://%s/api/v1/tunnel/%s/ws", scheme, host, token)
+		wsURL := fmt.Sprintf("%s/%s/ws", publicBase, token)
 		writeJSON(w, http.StatusOK, createTokenResponse{Token: token, WSURL: wsURL})
 	}
 }

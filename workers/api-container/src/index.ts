@@ -28,6 +28,7 @@ interface Env {
   TURSO_API_TOKEN: string;
   TURSO_ORG_SLUG: string;
   TURSO_GROUP: string;
+  TUNNEL_PUBLIC_URL: string;
 }
 
 export class ApiContainer extends Container<Env> {
@@ -63,6 +64,7 @@ export class ApiContainer extends Container<Env> {
       TURSO_API_TOKEN: env.TURSO_API_TOKEN ?? "",
       TURSO_ORG_SLUG: env.TURSO_ORG_SLUG ?? "",
       TURSO_GROUP: env.TURSO_GROUP ?? "",
+      TUNNEL_PUBLIC_URL: env.TUNNEL_PUBLIC_URL ?? "",
       PORT: "8080",
     };
   }
