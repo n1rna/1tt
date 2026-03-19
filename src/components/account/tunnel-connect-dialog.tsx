@@ -104,14 +104,17 @@ export function TunnelConnectDialog({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const cliCommand = (() => {
-    if (!tunnel) return "";
-    // Extract the server base from ws_url (everything before the token path)
+  const { cliCommand, oneLiner } = (() => {
+    if (!tunnel) return { cliCommand: "", oneLiner: "" };
     const wsUrl = tunnel.ws_url;
     const serverBase = wsUrl.replace(/\/[^/]+\/ws$/, "");
     const isDefault = serverBase === "wss://api.1tt.dev/api/v1/tunnel";
     const serverFlag = isDefault ? "" : ` --server ${serverBase}`;
-    return `1tt tunnel --token ${tunnel.token}${serverFlag} --db <YOUR_CONNECTION_STRING>`;
+    const tunnelArgs = `tunnel --token ${tunnel.token}${serverFlag} --db <YOUR_CONNECTION_STRING>`;
+    return {
+      cliCommand: `1tt ${tunnelArgs}`,
+      oneLiner: `curl -sSfL https://1tt.dev/cli/install.sh | sh -s -- ${tunnelArgs}`,
+    };
   })();
 
   const handleOpenStudio = () => {
@@ -184,23 +187,45 @@ export function TunnelConnectDialog({
                 </span>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground font-medium">
-                  Run this command in your terminal:
-                </p>
-                <div className="relative">
-                  <pre className="text-xs font-mono bg-zinc-950 text-zinc-100 rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-all">
-                    {cliCommand}
-                  </pre>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-6 w-6 text-zinc-400 hover:text-zinc-100"
-                    onClick={() => void handleCopy(cliCommand)}
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  </Button>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    If you have the CLI installed:
+                  </p>
+                  <div className="relative">
+                    <pre className="text-xs font-mono bg-zinc-950 text-zinc-100 rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-all">
+                      {cliCommand}
+                    </pre>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6 text-zinc-400 hover:text-zinc-100"
+                      onClick={() => void handleCopy(cliCommand)}
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
                 </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    Or install + run in one command:
+                  </p>
+                  <div className="relative">
+                    <pre className="text-[11px] font-mono bg-zinc-950 text-zinc-100 rounded-lg p-3 pr-10 overflow-x-auto whitespace-pre-wrap break-all">
+                      {oneLiner}
+                    </pre>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6 text-zinc-400 hover:text-zinc-100"
+                      onClick={() => void handleCopy(oneLiner)}
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                </div>
+
                 <p className="text-[11px] text-muted-foreground/60">
                   Replace <code className="font-mono bg-muted px-1 rounded">{"<YOUR_CONNECTION_STRING>"}</code> with your database URL, e.g.{" "}
                   <code className="font-mono bg-muted px-1 rounded">postgres://user:pass@localhost:5432/mydb</code> or{" "}
