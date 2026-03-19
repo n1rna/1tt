@@ -8,7 +8,7 @@ export const metadata = guideMetadata({
   slug,
   title: "Hosted Redis with Upstash",
   description:
-    "Create hosted Redis databases in seconds and manage them from the browser — browse keys, inspect values, set TTLs, and run commands without installing anything.",
+    "Create hosted Redis databases in seconds — run commands, browse keys, monitor performance, and inspect BullMQ, Sidekiq, and Celery queues from the browser.",
   keywords: [
     "redis",
     "upstash",
@@ -19,6 +19,11 @@ export const metadata = guideMetadata({
     "hosted redis",
     "redis client",
     "redis commands",
+    "bullmq",
+    "sidekiq",
+    "celery",
+    "redis streams",
+    "consumer groups",
   ],
 });
 
@@ -43,6 +48,10 @@ export default function RedisStudioGuide() {
           full-featured Redis browser that runs entirely in the browser — no
           install, no CLI, no SSH.
         </Guide.P>
+        <Guide.P>
+          The studio uses a tabbed interface so you can have multiple query
+          tabs, metrics, monitoring, and framework views open at the same time.
+        </Guide.P>
         <Guide.Callout>
           Redis databases are available on{" "}
           <Guide.Strong>Pro</Guide.Strong> and <Guide.Strong>Max</Guide.Strong>{" "}
@@ -57,109 +66,159 @@ export default function RedisStudioGuide() {
           seconds, powered by Upstash.
         </Guide.P>
         <Guide.P>
-          Each database gets its own REST endpoint and authentication token. You
-          can use these credentials from the studio or from your own
-          applications via the Upstash REST API or the{" "}
-          <Guide.Code>@upstash/redis</Guide.Code> TypeScript SDK.
+          Each database gets its own REST endpoint, Redis URL, and
+          authentication token. You can use these credentials from the studio
+          or from your own applications.
         </Guide.P>
 
-        <Guide.H2>Browsing keys</Guide.H2>
+        <Guide.H2>Query tabs</Guide.H2>
         <Guide.P>
-          The sidebar scans your keyspace and shows each key with its type
-          (string, hash, list, set, sorted set, stream) and TTL. Filter by
-          pattern — <Guide.Code>user:*</Guide.Code>,{" "}
-          <Guide.Code>cache:*</Guide.Code>, or any glob — to narrow the list.
+          Each query tab is an independent command workspace with its own
+          history. Type a Redis command, press Enter, and see the result.
+          Open as many tabs as you need.
         </Guide.P>
         <Guide.UL>
           <li>
-            <Guide.Strong>Type badges</Guide.Strong> — color-coded labels so
-            you can tell strings from hashes at a glance
+            <Guide.Strong>SCAN detection</Guide.Strong> — when a command
+            returns a SCAN result, keys are shown as a clickable list that
+            expands inline to show type, TTL, and value
           </li>
           <li>
-            <Guide.Strong>TTL indicators</Guide.Strong> — see which keys have
-            an expiry and how long is left
+            <Guide.Strong>Command history</Guide.Strong> — collapsible,
+            resizable panel at the bottom with all past commands and their
+            results; re-run any command with one click
           </li>
           <li>
-            <Guide.Strong>Lazy loading</Guide.Strong> — keys are loaded in
-            batches via <Guide.Code>SCAN</Guide.Code>, so even databases with
-            millions of keys stay responsive
+            <Guide.Strong>Arrow Up/Down</Guide.Strong> — cycle through
+            history directly from the input
+          </li>
+          <li>
+            <Guide.Strong>AI assistant</Guide.Strong> — describe what you
+            want in plain English and the AI generates the Redis command
           </li>
         </Guide.UL>
 
-        <Guide.H2>Inspecting values</Guide.H2>
+        <Guide.H2>Key Namespace Explorer</Guide.H2>
         <Guide.P>
-          Click any key to view its value in a type-appropriate viewer:
+          The Key Explorer scans your entire keyspace and organizes keys into
+          a tree by splitting on <Guide.Code>:</Guide.Code> delimiters. If
+          your keys follow patterns like{" "}
+          <Guide.Code>user:123:profile</Guide.Code> or{" "}
+          <Guide.Code>cache:products:featured</Guide.Code>, the tree groups
+          them into browsable namespaces.
         </Guide.P>
         <Guide.UL>
           <li>
-            <Guide.Strong>Strings</Guide.Strong> — displayed as text, with
-            automatic JSON formatting when the value is valid JSON
+            <Guide.Strong>Tree view</Guide.Strong> — expand and collapse
+            namespaces, see key counts at each level
           </li>
           <li>
-            <Guide.Strong>Hashes</Guide.Strong> — field-value table from{" "}
-            <Guide.Code>HGETALL</Guide.Code>
+            <Guide.Strong>Search filter</Guide.Strong> — narrow the tree
+            to matching key patterns
           </li>
           <li>
-            <Guide.Strong>Lists</Guide.Strong> — indexed list from{" "}
-            <Guide.Code>LRANGE</Guide.Code>
+            <Guide.Strong>Key inspection</Guide.Strong> — click any leaf
+            key to see its type, TTL, and value in a detail panel
           </li>
           <li>
-            <Guide.Strong>Sets</Guide.Strong> — member list from{" "}
-            <Guide.Code>SMEMBERS</Guide.Code>
-          </li>
-          <li>
-            <Guide.Strong>Sorted sets</Guide.Strong> — member-score table
-          </li>
-          <li>
-            <Guide.Strong>Streams</Guide.Strong> — entry IDs with their
-            field-value maps
+            <Guide.Strong>Top namespaces</Guide.Strong> — shows the 5
+            largest groups by key count
           </li>
         </Guide.UL>
-        <Guide.P>
-          Toggle <Guide.Strong>Raw</Guide.Strong> mode to see the underlying
-          value as a JSON string regardless of type.
-        </Guide.P>
 
-        <Guide.H2>TTL management</Guide.H2>
+        <Guide.H2>Stream Consumer Groups</Guide.H2>
         <Guide.P>
-          Click the TTL value in the key inspector to edit it. Enter seconds to
-          set an expiry, or clear the field to persist the key indefinitely.
-          Changes take effect immediately via{" "}
-          <Guide.Code>EXPIRE</Guide.Code> and{" "}
-          <Guide.Code>PERSIST</Guide.Code> commands.
-        </Guide.P>
-
-        <Guide.H2>Command console</Guide.H2>
-        <Guide.P>
-          The bottom panel is a Redis command console — type any command, press
-          Enter, and see the result. It supports the full Redis command set
-          (except blocking commands like{" "}
-          <Guide.Code>BLPOP</Guide.Code>).
+          The Stream Groups view discovers all stream-type keys and shows
+          their consumer groups, individual consumers, and pending messages.
         </Guide.P>
         <Guide.UL>
           <li>
-            <Guide.Strong>Command history</Guide.Strong> — use Arrow Up/Down to
-            cycle through previous commands
+            <Guide.Strong>Group overview</Guide.Strong> — consumer count,
+            pending count, last delivered ID for each group
           </li>
           <li>
-            <Guide.Strong>Click to re-run</Guide.Strong> — click any entry in
-            the history strip to load it back into the input
+            <Guide.Strong>Consumer details</Guide.Strong> — per-consumer
+            pending count and idle time
           </li>
           <li>
-            <Guide.Strong>JSON formatting</Guide.Strong> — complex return
-            values are pretty-printed
+            <Guide.Strong>Pending entries</Guide.Strong> — the PEL
+            (Pending Entry List) with entry ID, consumer, idle time, and
+            delivery count
+          </li>
+          <li>
+            <Guide.Strong>ACK button</Guide.Strong> — acknowledge pending
+            messages directly from the UI
+          </li>
+          <li>
+            <Guide.Strong>Recent entries</Guide.Strong> — the 20 most
+            recent stream entries with their fields
           </li>
         </Guide.UL>
+
+        <Guide.H2>BullMQ view</Guide.H2>
+        <Guide.P>
+          If you use BullMQ for job queues, the BullMQ view auto-discovers
+          your queues and shows a dashboard for each one. See job counts by
+          state (waiting, active, completed, failed, delayed, paused),
+          inspect individual jobs, and retry failed jobs.
+        </Guide.P>
+        <Guide.UL>
+          <li>
+            <Guide.Strong>Job inspection</Guide.Strong> — see job data,
+            options, timestamps, progress, return values, and stack traces
+          </li>
+          <li>
+            <Guide.Strong>Retry</Guide.Strong> — retry individual failed
+            jobs or all failed jobs at once, moving them back to the
+            waiting queue
+          </li>
+        </Guide.UL>
+
+        <Guide.H2>Sidekiq view</Guide.H2>
+        <Guide.P>
+          The Sidekiq view loads queue names from the{" "}
+          <Guide.Code>queues</Guide.Code> set and shows processed/failed
+          counts, per-queue job lists, and the scheduled, retry, and dead
+          sorted sets. Each job payload is parsed and displayed with its
+          class, args, and error details.
+        </Guide.P>
+
+        <Guide.H2>Celery view</Guide.H2>
+        <Guide.P>
+          The Celery view discovers queues from{" "}
+          <Guide.Code>_kombu.binding.*</Guide.Code> keys and task results
+          from <Guide.Code>celery-task-meta-*</Guide.Code> keys. Browse
+          pending tasks per queue, see task results with color-coded status
+          badges, and inspect Python tracebacks for failed tasks.
+        </Guide.P>
+
+        <Guide.H2>Metrics and monitoring</Guide.H2>
+        <Guide.P>
+          The <Guide.Strong>Metrics</Guide.Strong> tab shows a snapshot of
+          your database from the Redis <Guide.Code>INFO</Guide.Code> command:
+          total keys, memory usage, clients, uptime, ops/sec, and hit rate,
+          plus all INFO sections in expandable detail.
+        </Guide.P>
+        <Guide.P>
+          The <Guide.Strong>Live Monitor</Guide.Strong> tab polls INFO at
+          a configurable interval (5/10/30 seconds) and tracks trends over
+          time. Watch key counts, memory, and ops/sec change in real time
+          with delta indicators.
+        </Guide.P>
 
         <Guide.H2>Using your database outside 1tt.dev</Guide.H2>
         <Guide.P>
-          Every Redis database comes with a REST endpoint and token. Click the
-          connection details icon in the sidebar to copy them. You can use these
-          with the Upstash REST API directly:
+          Every database comes with a Redis URL for direct connections and a
+          REST endpoint for HTTP access. Click the connection details icon
+          in the sidebar to copy them.
         </Guide.P>
         <Guide.Callout>
           <pre className="text-xs font-mono overflow-x-auto whitespace-pre">
-{`curl https://your-endpoint.upstash.io/get/mykey \\
+{`# Direct Redis connection
+redis-cli -u redis://default:PASSWORD@host:6379
+
+# REST API
+curl https://your-endpoint.upstash.io/get/mykey \\
   -H "Authorization: Bearer YOUR_TOKEN"`}
           </pre>
         </Guide.Callout>
@@ -180,8 +239,9 @@ const val = await redis.get("key")`}
           </pre>
         </Guide.Callout>
         <Guide.P>
-          This works in serverless functions, edge runtimes, and any environment
-          that supports HTTP — no Redis driver or TCP connection needed.
+          This works in serverless functions, edge runtimes, and any
+          environment that supports HTTP — no Redis driver or TCP connection
+          needed.
         </Guide.P>
       </GuideLayout>
     </>
