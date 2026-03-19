@@ -1992,9 +1992,9 @@ function makeQueryTabId() {
   return `query-${queryTabCounter++}`;
 }
 
-function RedisStudioInner() {
+export function RedisStudioInner({ dbId: propDbId }: { dbId?: string } = {}) {
   const params = useParams();
-  const dbId = params.id as string;
+  const dbId = propDbId ?? (params.id as string);
 
   const [db, setDb] = useState<RedisDetail | null>(null);
   const [dbLoading, setDbLoading] = useState(true);
@@ -2157,7 +2157,7 @@ function RedisStudioInner() {
           <div className="flex items-center gap-2">
             <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="text-sm font-semibold truncate flex-1 min-w-0">
-              {dbLoading ? "Loading…" : (db?.name ?? dbId)}
+              {dbLoading ? "Loading…" : (db?.name ?? (dbId.startsWith("tunnel:") ? "External Redis" : dbId))}
             </span>
             {db && (
               <Button

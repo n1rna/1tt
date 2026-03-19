@@ -89,10 +89,23 @@ export async function getRedisDetail(id: string): Promise<RedisDetail> {
   return (await res.json()) as RedisDetail;
 }
 
+// ── Executor override for tunnel mode ────────────────────────────────────────
+// When set, all commands go through the tunnel instead of the hosted API.
+// Set by the tunnel studio component, cleared on unmount.
+
+let _tunnelExecutor: ((command: string[]) => Promise<RedisCommandResult>) | null = null;
+
+export function setTunnelExecutor(fn: ((command: string[]) => Promise<RedisCommandResult>) | null) {
+  _tunnelExecutor = fn;
+}
+
 export async function executeCommand(
   id: string,
   command: string[]
 ): Promise<RedisCommandResult> {
+  if (_tunnelExecutor) {
+    return _tunnelExecutor(command);
+  }
   const res = await fetch(`/api/proxy/redis/${id}/command`, {
     method: "POST",
     credentials: "include",
@@ -109,6 +122,10 @@ export async function executePipeline(
   id: string,
   commands: string[][]
 ): Promise<RedisCommandResult[]> {
+  if (_tunnelExecutor) {
+    // Execute commands sequentially through the tunnel
+    return Promise.all(commands.map((cmd) => _tunnelExecutor!(cmd)));
+  }
   const res = await fetch(`/api/proxy/redis/${id}/pipeline`, {
     method: "POST",
     credentials: "include",
@@ -122,6 +139,9 @@ export async function executePipeline(
 }
 
 export async function getRedisInfo(id: string): Promise<RedisCommandResult> {
+  if (_tunnelExecutor) {
+    return _tunnelExecutor(["INFO"]);
+  }
   const res = await fetch(`/api/proxy/redis/${id}/info`, {
     credentials: "include",
   });
