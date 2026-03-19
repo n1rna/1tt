@@ -847,6 +847,8 @@ interface QueryResultAreaProps {
   result: unknown;
   error: string | null;
   loading: boolean;
+  /** Extra args from the SCAN command (e.g. MATCH, COUNT) for pagination */
+  scanExtraArgs?: string[];
 }
 
 function QueryResultArea({
@@ -854,10 +856,15 @@ function QueryResultArea({
   result,
   error,
   loading,
+  scanExtraArgs = [],
 }: QueryResultAreaProps) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detailKey, setDetailKey] = useState(0);
   const [scanKeys, setScanKeys] = useState<string[]>([]);
+  const [scanCursor, setScanCursor] = useState<string>("0");
+  const [scanArgs, setScanArgs] = useState<string[]>(scanExtraArgs);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanMaxItems, setScanMaxItems] = useState(5000);
   const [splitPct, setSplitPct] = useState(33);
   const splitRef = useRef<HTMLDivElement>(null);
 
@@ -885,15 +892,71 @@ function QueryResultArea({
     document.addEventListener("mouseup", onUp);
   }, [splitPct]);
 
+  // Load one more page of SCAN results
+  const scanLoadMore = useCallback(async () => {
+    if (scanCursor === "0" && scanKeys.length > 0) return; // Done
+    setScanLoading(true);
+    try {
+      const res = await executeCommand(dbId, ["SCAN", scanCursor, ...scanArgs]);
+      if (res.error) return;
+      const scanRes = res.result as [string, string[]];
+      const newCursor = String(scanRes[0]);
+      const newKeys = Array.isArray(scanRes[1]) ? scanRes[1] : [];
+      setScanKeys((prev) => {
+        const set = new Set(prev);
+        for (const k of newKeys) set.add(k);
+        return Array.from(set).sort();
+      });
+      setScanCursor(newCursor);
+    } catch {
+      // silently fail
+    } finally {
+      setScanLoading(false);
+    }
+  }, [dbId, scanCursor, scanArgs, scanKeys.length]);
+
+  // Auto-paginate: scan all remaining pages
+  const scanAll = useCallback(async () => {
+    setScanLoading(true);
+    try {
+      let cursor = scanCursor;
+      const collected = new Set(scanKeys);
+      do {
+        const res = await executeCommand(dbId, ["SCAN", cursor, ...scanArgs]);
+        if (res.error) break;
+        const scanRes = res.result as [string, string[]];
+        cursor = String(scanRes[0]);
+        if (Array.isArray(scanRes[1])) {
+          for (const k of scanRes[1]) {
+            if (collected.size >= scanMaxItems) { cursor = "0"; break; }
+            collected.add(k);
+          }
+        }
+        // Update UI progressively
+        setScanKeys(Array.from(collected).sort());
+        setScanCursor(cursor);
+      } while (cursor !== "0");
+    } catch {
+      // silently fail
+    } finally {
+      setScanLoading(false);
+    }
+  }, [dbId, scanCursor, scanArgs, scanKeys, scanMaxItems]);
+
   // Reset when result changes
   useEffect(() => {
     setSelectedKey(null);
+    setScanArgs(scanExtraArgs);
     if (isScanResult(result)) {
-      setScanKeys(result[1] as string[]);
+      const cursor = String((result as [string, string[]])[0]);
+      const keys = (result as [string, string[]])[1] ?? [];
+      setScanKeys(keys);
+      setScanCursor(cursor);
     } else {
       setScanKeys([]);
+      setScanCursor("0");
     }
-  }, [result]);
+  }, [result, scanExtraArgs]);
 
   const handleSelectKey = (key: string) => {
     setSelectedKey(key);
@@ -926,34 +989,81 @@ function QueryResultArea({
   }
 
   // SCAN results → split view like key explorer
-  if (isScanResult(result) && scanKeys.length > 0) {
+  const scanDone = scanCursor === "0" && scanKeys.length > 0;
+  if (isScanResult(result) || scanKeys.length > 0) {
     return (
       <div ref={splitRef} className="flex h-full overflow-hidden">
         {/* Key list (left panel) */}
         <div
-          className="overflow-y-auto flex-shrink-0"
+          className="overflow-y-auto flex-shrink-0 flex flex-col"
           style={{ width: selectedKey ? `${splitPct}%` : "100%" }}
         >
-          <div className="px-3 py-2 border-b bg-muted/20">
-            <p className="text-[11px] text-muted-foreground font-medium">
-              {scanKeys.length} key{scanKeys.length !== 1 ? "s" : ""} — cursor{" "}
-              <span className="font-mono">{(result as [string, string[]])[0]}</span>
-            </p>
-          </div>
-          <div>
-            {scanKeys.map((key) => (
-              <button
-                key={key}
-                className={cn(
-                  "w-full text-left flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent/50 transition-colors text-xs font-mono truncate",
-                  selectedKey === key && "bg-accent/60 text-foreground"
+          {/* Header with count + controls */}
+          <div className="px-3 py-2 border-b bg-muted/20 shrink-0 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                {scanKeys.length} key{scanKeys.length !== 1 ? "s" : ""}
+                {scanDone ? (
+                  <span className="text-green-600 dark:text-green-400 ml-1">(complete)</span>
+                ) : (
+                  <span className="ml-1">— cursor <span className="font-mono">{scanCursor}</span></span>
                 )}
-                onClick={() => handleSelectKey(key)}
-              >
-                <Database className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                <span className="truncate">{key}</span>
-              </button>
-            ))}
+              </p>
+            </div>
+            {!scanDone && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => void scanLoadMore()}
+                  disabled={scanLoading}
+                >
+                  {scanLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Load More
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px] px-2"
+                  onClick={() => void scanAll()}
+                  disabled={scanLoading}
+                >
+                  {scanLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Scan All
+                </Button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <span className="text-[10px] text-muted-foreground/60">Max:</span>
+                  <input
+                    type="number"
+                    value={scanMaxItems}
+                    onChange={(e) => setScanMaxItems(Math.max(100, Math.min(50000, Number(e.target.value) || 5000)))}
+                    className="h-6 w-16 rounded border bg-background px-1.5 text-[11px] font-mono outline-none focus:border-ring text-right"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {scanKeys.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-xs text-muted-foreground/50 py-8">
+                No keys yet — click Load More or Scan All
+              </div>
+            ) : (
+              scanKeys.map((key) => (
+                <button
+                  key={key}
+                  className={cn(
+                    "w-full text-left flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent/50 transition-colors text-xs font-mono truncate",
+                    selectedKey === key && "bg-accent/60 text-foreground"
+                  )}
+                  onClick={() => handleSelectKey(key)}
+                >
+                  <Database className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                  <span className="truncate">{key}</span>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -1102,6 +1212,7 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyHeight, setHistoryHeight] = useState(180);
   const historyResizing = useRef(false);
+  const [lastScanArgs, setLastScanArgs] = useState<string[]>([]);
 
   const handleHistoryResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1135,6 +1246,14 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
     const parts = parseCommand(raw);
     if (parts.length === 0) return;
 
+    // Track SCAN args for pagination in result area
+    const cmd = parts[0].toUpperCase();
+    if (cmd === "SCAN") {
+      setLastScanArgs(parts.slice(2)); // everything after SCAN <cursor>
+    } else {
+      setLastScanArgs([]);
+    }
+
     onChange({ running: true, error: null, result: undefined });
 
     const entry: HistoryEntry = {
@@ -1145,51 +1264,6 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
     };
 
     try {
-      // Auto-paginate SCAN commands to collect all keys
-      const cmd = parts[0].toUpperCase();
-      if (cmd === "SCAN") {
-        const allKeys: string[] = [];
-        let cursor = parts[1] ?? "0";
-        const extraArgs = parts.slice(2); // MATCH, COUNT, etc.
-        const MAX_KEYS = 5000;
-
-        do {
-          const res = await executeCommand(dbId, ["SCAN", cursor, ...extraArgs]);
-          if (res.error) {
-            entry.result = `(error) ${res.error}`;
-            entry.error = true;
-            onChange({
-              running: false, result: undefined,
-              error: `(error) ${res.error}`,
-              history: [entry, ...state.history].slice(0, 50),
-              historyIndex: -1, input: "",
-            });
-            return;
-          }
-          const scanRes = res.result as [string, string[]];
-          cursor = String(scanRes[0]);
-          if (Array.isArray(scanRes[1])) {
-            for (const k of scanRes[1]) {
-              if (allKeys.length >= MAX_KEYS) { cursor = "0"; break; }
-              allKeys.push(k);
-            }
-          }
-        } while (cursor !== "0");
-
-        allKeys.sort();
-        const fullResult: [string, string[]] = ["0", allKeys];
-        const output = `${allKeys.length} keys (full scan)`;
-        entry.result = output;
-        onChange({
-          running: false,
-          result: fullResult,
-          error: null,
-          history: [entry, ...state.history].slice(0, 50),
-          historyIndex: -1, input: "",
-        });
-        return;
-      }
-
       const res = await executeCommand(dbId, parts);
       const output = res.error ? `(error) ${res.error}` : formatResult(res.result);
       entry.result = output;
@@ -1364,7 +1438,7 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
             Run a command to see results
           </div>
         ) : (
-          <QueryResultArea dbId={dbId} result={state.result} error={state.error} loading={state.running} />
+          <QueryResultArea dbId={dbId} result={state.result} error={state.error} loading={state.running} scanExtraArgs={lastScanArgs} />
         )}
       </div>
     </div>

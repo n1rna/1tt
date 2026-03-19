@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSession } from "@/lib/auth-client";
 import { AuthGate } from "@/components/layout/auth-gate";
 import { useBillingStatus } from "@/lib/billing";
@@ -19,7 +19,9 @@ import {
   useRedis,
   createRedis,
   deleteRedis,
+  getRedisDetail,
   type UserRedis,
+  type RedisDetail,
 } from "@/lib/redis";
 import { ConnectionDialog } from "@/components/account/connection-dialog";
 import { ApiInfoDialog } from "@/components/account/hosted-sqlite-api-dialog";
@@ -41,7 +43,11 @@ import {
 } from "@/components/ui/select";
 import {
   AlertTriangle,
+  Check,
+  Copy,
   Database,
+  Eye,
+  EyeOff,
   FileUp,
   Globe,
   Link2,
@@ -443,6 +449,120 @@ function SqliteDatabaseCard({
 
 // ── Redis Database Card ────────────────────────────
 
+function RedisConnectionDialog({
+  dbId,
+  dbName,
+  open,
+  onOpenChange,
+}: {
+  dbId: string;
+  dbName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [detail, setDetail] = useState<RedisDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setRevealed(false);
+    getRedisDetail(dbId)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+      .finally(() => setLoading(false));
+  }, [open, dbId]);
+
+  const copyValue = async (value: string, label: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const redisUrl = detail
+    ? `rediss://default:${detail.password}@${detail.endpoint}`
+    : "";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Database className="h-4 w-4" />
+            {dbName} — Connection Details
+          </DialogTitle>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading…
+          </div>
+        ) : detail ? (
+          <div className="space-y-3">
+            {/* Connection URL */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">Connection URL</p>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 min-w-0 text-xs font-mono bg-muted rounded px-2 py-1.5 break-all">
+                  {revealed ? redisUrl : redisUrl.replace(/:([^:@]+)@/, ":••••••••@")}
+                </code>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setRevealed((v) => !v)}>
+                  {revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => void copyValue(redisUrl, "url")}>
+                  {copied === "url" ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+
+            {/* Individual fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Endpoint</p>
+                <div className="flex items-center gap-1">
+                  <code className="text-xs font-mono text-foreground truncate">{detail.endpoint}</code>
+                  <button className="shrink-0" onClick={() => void copyValue(detail.endpoint, "endpoint")}>
+                    {copied === "endpoint" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Password</p>
+                <div className="flex items-center gap-1">
+                  <code className="text-xs font-mono text-foreground truncate">
+                    {revealed ? detail.password : "••••••••"}
+                  </code>
+                  <button className="shrink-0" onClick={() => void copyValue(detail.password, "password")}>
+                    {copied === "password" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground hover:text-foreground" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* REST Token */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">REST Token</p>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 min-w-0 text-xs font-mono bg-muted rounded px-2 py-1.5 truncate">
+                  {revealed ? detail.restToken : "••••••••••••••••"}
+                </code>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => void copyValue(detail.restToken, "rest")}>
+                  {copied === "rest" ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground py-4 text-center">Failed to load connection details.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RedisDatabaseCard({
   db,
   onDeleted,
@@ -451,6 +571,7 @@ function RedisDatabaseCard({
   onDeleted: () => void;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [connOpen, setConnOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -496,6 +617,15 @@ function RedisDatabaseCard({
           <Button
             variant="ghost"
             size="icon"
+            className="h-7 w-7"
+            onClick={() => setConnOpen(true)}
+            title="Connection details"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-7 w-7 text-destructive hover:text-destructive"
             onClick={() => setDeleteOpen(true)}
             disabled={deleting}
@@ -509,6 +639,12 @@ function RedisDatabaseCard({
           </Button>
         </div>
       </div>
+      <RedisConnectionDialog
+        dbId={db.id}
+        dbName={db.name}
+        open={connOpen}
+        onOpenChange={setConnOpen}
+      />
       <DeleteDatabaseDialog
         dbName={db.name}
         open={deleteOpen}
