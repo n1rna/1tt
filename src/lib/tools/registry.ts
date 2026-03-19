@@ -352,6 +352,15 @@ export const tools: ToolDefinition[] = [
     icon: "Database",
     keywords: ["sql", "formatter", "format", "beautify", "minify", "postgres", "mysql", "sqlite", "dialect", "query", "ai", "natural language"],
   },
+  {
+    slug: "poker",
+    name: "Planning Poker",
+    description: "Real-time planning poker for agile teams — vote on story sizes together",
+    icon: "Users",
+    category: "planning",
+    keywords: ["planning poker", "agile", "scrum", "story points", "estimation", "sprint", "fibonacci", "team", "vote", "realtime"],
+    requiresAuth: true,
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

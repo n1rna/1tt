@@ -56,6 +56,13 @@
 				"default": "http://localhost:8090",
 				"required": false
 			},
+			"NEXT_PUBLIC_API_URL": {
+				"name": "NEXT_PUBLIC_API_URL",
+				"title": "Public Go backend URL (for WebSocket connections)",
+				"type": "string",
+				"default": "http://localhost:8090",
+				"required": false
+			},
 			"NEXT_PUBLIC_TURNSTILE_SITE_KEY": {
 				"name": "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
 				"title": "Cloudflare Turnstile site key",

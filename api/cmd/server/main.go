@@ -21,6 +21,7 @@ import (
 	"github.com/n1rna/1tt/api/internal/llms"
 	"github.com/n1rna/1tt/api/internal/middleware"
 	"github.com/n1rna/1tt/api/internal/neon"
+	"github.com/n1rna/1tt/api/internal/poker"
 	"github.com/n1rna/1tt/api/internal/storage"
 	"github.com/n1rna/1tt/api/internal/turso"
 	"github.com/n1rna/1tt/api/internal/upstash"
@@ -92,6 +93,9 @@ func main() {
 		log.Printf("WARNING: Upstash not configured (missing UPSTASH_EMAIL or UPSTASH_API_KEY — Redis hosting will be unavailable)")
 	}
 
+	pokerHub := poker.NewHub(db)
+	defer pokerHub.Shutdown()
+
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -134,6 +138,10 @@ func main() {
 			r.Get("/sqlite/{id}/schema", handler.GetSqliteSchema(db, tursoClient))
 		}
 
+		// Planning Poker (public — no auth required)
+		r.Get("/poker/ws", poker.HandleWebSocket(pokerHub))
+		r.Get("/poker/check", poker.HandleCheckSession(pokerHub))
+
 		// Public routes (no auth)
 		if db != nil {
 			r.Get("/pastes/{id}", handler.GetPaste(db))
@@ -149,6 +157,13 @@ func main() {
 		// Authenticated routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg))
+
+			// Planning Poker
+			r.Post("/poker/sessions", poker.HandleCreateSession(pokerHub))
+			r.Get("/poker/sessions", poker.HandleListSessions(pokerHub))
+			r.Post("/poker/sessions/{id}/disable", poker.HandleDisableSession(pokerHub))
+			r.Post("/poker/sessions/{id}/enable", poker.HandleEnableSession(pokerHub))
+			r.Delete("/poker/sessions/{id}", poker.HandleDeleteSession(pokerHub))
 			if r2 != nil && db != nil {
 				r.Post("/files", handler.UploadFile(cfg, db, r2))
 				r.Get("/files", handler.ListFiles(db))
