@@ -23,8 +23,15 @@ import {
   type UserRedis,
   type RedisDetail,
 } from "@/lib/redis";
+import {
+  useStorageBuckets,
+  createBucket,
+  deleteBucket,
+  type StorageBucket,
+} from "@/lib/storage";
 import { ConnectionDialog } from "@/components/account/connection-dialog";
 import { ApiInfoDialog } from "@/components/account/hosted-sqlite-api-dialog";
+import { TunnelConnectDialog } from "@/components/account/tunnel-connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,10 +57,12 @@ import {
   EyeOff,
   FileUp,
   Globe,
+  HardDrive,
   Link2,
   Loader2,
   Plus,
   Trash2,
+  Wifi,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -83,7 +92,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 type UnifiedDb =
   | { type: "neon"; id: string; name: string; region: string; status: string; createdAt: string }
   | { type: "sqlite"; db: HostedSqliteDB }
-  | { type: "redis"; db: UserRedis };
+  | { type: "redis"; db: UserRedis }
+  | { type: "storage"; db: StorageBucket };
 
 // ── Helpers ────────────────────────────────────────
 
@@ -98,7 +108,8 @@ function formatDate(iso: string): string {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function nameFromFile(filename: string): string {
@@ -154,7 +165,7 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-function TypeBadge({ type }: { type: "neon" | "sqlite" | "redis" }) {
+function TypeBadge({ type }: { type: "neon" | "sqlite" | "redis" | "storage" }) {
   if (type === "neon") {
     return (
       <span className="inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 shrink-0">
@@ -169,10 +180,190 @@ function TypeBadge({ type }: { type: "neon" | "sqlite" | "redis" }) {
       </span>
     );
   }
+  if (type === "storage") {
+    return (
+      <span className="inline-flex items-center rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 shrink-0">
+        Storage
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 shrink-0">
       SQLite
     </span>
+  );
+}
+
+// ── Storage Bucket Card ─────────────────────────────
+
+function StorageBucketCard({
+  bucket,
+  onDeleted,
+}: {
+  bucket: StorageBucket;
+  onDeleted: () => void;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteBucket(bucket.id);
+      setDeleteOpen(false);
+      onDeleted();
+    } catch {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={`/account/storage/${bucket.id}`}
+          className="flex items-center gap-3 min-w-0 flex-1 group"
+        >
+          <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium truncate group-hover:underline underline-offset-2">
+                {bucket.name}
+              </p>
+              <TypeBadge type="storage" />
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-muted-foreground">
+                {formatBytes(bucket.totalSize)}
+              </span>
+              <span className="text-muted-foreground/40 text-xs">·</span>
+              <span className="text-xs text-muted-foreground">
+                {bucket.objectCount} {bucket.objectCount === 1 ? "object" : "objects"}
+              </span>
+              <span className="text-muted-foreground/40 text-xs">·</span>
+              <span className="text-xs text-muted-foreground">
+                {formatDate(bucket.createdAt)}
+              </span>
+            </div>
+          </div>
+        </Link>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <StatusDot status={bucket.status} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            disabled={deleting}
+            title="Delete bucket"
+          >
+            {deleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </div>
+      </div>
+      <DeleteDatabaseDialog
+        dbName={bucket.name}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+        deleting={deleting}
+      />
+    </div>
+  );
+}
+
+// ── Create Bucket Dialog ────────────────────────────
+
+const BUCKET_NAME_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+
+function CreateBucketDialog({ onCreated }: { onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isValid = BUCKET_NAME_RE.test(name);
+
+  const handleCreate = async () => {
+    if (!isValid) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await createBucket(name.trim());
+      setOpen(false);
+      setName("");
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create bucket");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        New Bucket
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Storage Bucket</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bucket-name">Name</Label>
+              <Input
+                id="bucket-name"
+                placeholder="my-bucket"
+                value={name}
+                onChange={(e) => setName(e.target.value.toLowerCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreate();
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Lowercase alphanumeric and hyphens, 3–63 characters.
+              </p>
+            </div>
+            {name.length > 0 && !isValid && (
+              <p className="text-sm text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Must be 3–63 lowercase alphanumeric characters or hyphens.
+              </p>
+            )}
+            {error && (
+              <p className="text-sm text-destructive flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {error}
+              </p>
+            )}
+            <Button
+              className="w-full gap-2"
+              onClick={() => void handleCreate()}
+              disabled={creating || !isValid}
+            >
+              {creating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              {creating ? "Creating…" : "Create Bucket"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1020,11 +1211,13 @@ function DatabaseDashboardInner() {
   const { data: neonDbs, loading: neonLoading, error: neonError, refetch: refetchNeon } = useDatabases();
   const { data: sqliteDbs, loading: sqliteLoading, error: sqliteError, refetch: refetchSqlite } = useHostedSqliteDbs();
   const { data: redisDbs, loading: redisLoading, error: redisError, refetch: refetchRedis } = useRedis();
+  const { data: storageBuckets, loading: storageLoading, error: storageError, refetch: refetchStorage } = useStorageBuckets();
   const { data: billing, loading: billingLoading } = useBillingStatus();
   const [pendingApiDb, setPendingApiDb] = useState<HostedSqliteDB | null>(null);
+  const [tunnelOpen, setTunnelOpen] = useState(false);
 
-  const loading = neonLoading || sqliteLoading || redisLoading;
-  const error = neonError ?? sqliteError ?? redisError ?? null;
+  const loading = neonLoading || sqliteLoading || redisLoading || storageLoading;
+  const error = neonError ?? sqliteError ?? redisError ?? storageError ?? null;
   const isPaidPlan = billing != null && billing.plan !== "free";
   const billingResolved = !billingLoading && billing != null;
 
@@ -1032,6 +1225,7 @@ function DatabaseDashboardInner() {
     void refetchNeon();
     void refetchSqlite();
     void refetchRedis();
+    void refetchStorage();
   };
 
   // Build and sort unified list
@@ -1039,6 +1233,7 @@ function DatabaseDashboardInner() {
     ...(neonDbs ?? []).map((db): UnifiedDb => ({ type: "neon", ...db })),
     ...(sqliteDbs ?? []).map((db): UnifiedDb => ({ type: "sqlite", db })),
     ...(redisDbs ?? []).map((db): UnifiedDb => ({ type: "redis", db })),
+    ...(storageBuckets ?? []).map((db): UnifiedDb => ({ type: "storage", db })),
   ].sort(
     (a, b) =>
       new Date(getCreatedAt(b)).getTime() - new Date(getCreatedAt(a)).getTime()
@@ -1058,14 +1253,25 @@ function DatabaseDashboardInner() {
         <div>
           <h1 className="text-lg font-semibold">Databases</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your Postgres, SQLite, and Redis databases.
+            Manage your Postgres, SQLite, Redis, and object storage.
           </p>
         </div>
         {!loading && !error && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <CreatePostgresDialog onCreated={refetchAll} />
             <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
             <CreateRedisDialog onCreated={refetchAll} />
+            <CreateBucketDialog onCreated={refetchAll} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setTunnelOpen(true)}
+            >
+              <Wifi className="h-3.5 w-3.5" />
+              Connect External
+            </Button>
+            <TunnelConnectDialog open={tunnelOpen} onOpenChange={setTunnelOpen} />
           </div>
         )}
       </div>
@@ -1134,10 +1340,11 @@ function DatabaseDashboardInner() {
               Create your first database to get started.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
             <CreatePostgresDialog onCreated={refetchAll} />
             <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
             <CreateRedisDialog onCreated={refetchAll} />
+            <CreateBucketDialog onCreated={refetchAll} />
           </div>
         </div>
       )}
@@ -1156,6 +1363,12 @@ function DatabaseDashboardInner() {
               <RedisDatabaseCard
                 key={`redis-${item.db.id}`}
                 db={item.db}
+                onDeleted={refetchAll}
+              />
+            ) : item.type === "storage" ? (
+              <StorageBucketCard
+                key={`storage-${item.db.id}`}
+                bucket={item.db}
                 onDeleted={refetchAll}
               />
             ) : (

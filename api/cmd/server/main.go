@@ -23,6 +23,7 @@ import (
 	"github.com/n1rna/1tt/api/internal/neon"
 	"github.com/n1rna/1tt/api/internal/poker"
 	"github.com/n1rna/1tt/api/internal/storage"
+	"github.com/n1rna/1tt/api/internal/tunnel"
 	"github.com/n1rna/1tt/api/internal/turso"
 	"github.com/n1rna/1tt/api/internal/upstash"
 )
@@ -96,6 +97,9 @@ func main() {
 	pokerHub := poker.NewHub(db)
 	defer pokerHub.Shutdown()
 
+	tunnelHub := tunnel.NewHub()
+	defer tunnelHub.Shutdown()
+
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -142,6 +146,9 @@ func main() {
 		r.Get("/poker/ws", poker.HandleWebSocket(pokerHub))
 		r.Get("/poker/check", poker.HandleCheckSession(pokerHub))
 
+		// Tunnel WebSocket (public — CLI authenticates via token)
+		r.Get("/tunnel/{token}/ws", tunnel.HandleWebSocket(tunnelHub))
+
 		// Public routes (no auth)
 		if db != nil {
 			r.Get("/pastes/{id}", handler.GetPaste(db))
@@ -157,6 +164,11 @@ func main() {
 		// Authenticated routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Auth(cfg))
+
+			// Tunnel hub
+			r.Post("/tunnel/create", tunnel.HandleCreateToken(tunnelHub))
+			r.Post("/tunnel/{token}/query", tunnel.HandleQuery(tunnelHub))
+			r.Get("/tunnel/{token}/schema", tunnel.HandleSchema(tunnelHub))
 
 			// Planning Poker
 			r.Post("/poker/sessions", poker.HandleCreateSession(pokerHub))
@@ -224,6 +236,17 @@ func main() {
 				r.Post("/redis/{id}/command", handler.ProxyCommand(db, upstashClient))
 				r.Post("/redis/{id}/pipeline", handler.ProxyPipeline(db, upstashClient))
 				r.Get("/redis/{id}/info", handler.GetRedisInfo(db, upstashClient))
+			}
+			// Object storage — S3-compatible buckets backed by Cloudflare R2.
+			if db != nil && r2 != nil {
+				r.Post("/storage/buckets", handler.CreateStorageBucket(db, r2, billingClient))
+				r.Get("/storage/buckets", handler.ListStorageBuckets(db))
+				r.Delete("/storage/buckets/{id}", handler.DeleteStorageBucket(db, r2))
+				r.Get("/storage/buckets/{id}/objects", handler.ListStorageObjects(db))
+				r.Post("/storage/buckets/{id}/objects", handler.UploadStorageObject(db, r2, billingClient))
+				r.Delete("/storage/buckets/{id}/objects/{objectId}", handler.DeleteStorageObject(db, r2))
+				r.Get("/storage/buckets/{id}/objects/{objectId}/url", handler.GetStorageObjectUrl(db, r2))
+				r.Get("/storage/usage", handler.GetStorageUsage(db, billingClient))
 			}
 			// AI query generation (SQL, Elasticsearch, etc.)
 			if db != nil {
