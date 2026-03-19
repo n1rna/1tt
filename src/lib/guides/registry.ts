@@ -178,6 +178,25 @@ export const guides: GuideDefinition[] = [
       "data preparation",
     ],
   },
+  {
+    slug: "planning-poker",
+    title: "Planning Poker for Agile Teams",
+    description:
+      "Run real-time planning poker sessions from the browser — estimate user stories together using Fibonacci, T-shirt, or custom scales.",
+    icon: "Users",
+    relatedTools: ["poker"],
+    keywords: [
+      "planning poker",
+      "agile estimation",
+      "scrum",
+      "story points",
+      "sprint planning",
+      "fibonacci",
+      "t-shirt sizing",
+      "team estimation",
+      "remote planning",
+    ],
+  },
 ];
 
 export function getGuideBySlug(slug: string): GuideDefinition | undefined {
