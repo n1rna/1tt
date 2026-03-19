@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import {
   Check,
   ChevronRight,
@@ -2421,47 +2421,50 @@ function StreamGroupDetail({
         {pending.length === 0 ? (
           <EmptyState label="No pending entries" />
         ) : (
-          <div className="rounded border overflow-hidden">
-            <div className="grid bg-muted/50 px-3 py-1.5 font-medium text-[11px] text-muted-foreground grid-cols-[1fr,1fr,5rem,5rem,5rem]">
-              <span>Entry ID</span>
-              <span>Consumer</span>
-              <span>Idle</span>
-              <span>Deliveries</span>
-              <span></span>
-            </div>
-            <div className="divide-y">
+          <table className="w-full text-xs rounded border overflow-hidden">
+            <thead>
+              <tr className="bg-muted/50 text-[11px] font-medium text-muted-foreground">
+                <th className="px-3 py-1.5 text-left">Entry ID</th>
+                <th className="px-3 py-1.5 text-left">Consumer</th>
+                <th className="px-3 py-1.5 text-left w-20">Idle</th>
+                <th className="px-3 py-1.5 text-left w-20">Deliveries</th>
+                <th className="px-3 py-1.5 text-left w-16"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
               {pending.map((p) => (
-                <div
-                  key={p.id}
-                  className="grid grid-cols-[1fr,1fr,5rem,5rem,5rem] px-3 py-1.5 text-xs items-center"
-                >
-                  <span className="font-mono truncate text-muted-foreground">
+                <tr key={p.id}>
+                  <td className="px-3 py-1.5 font-mono text-muted-foreground truncate max-w-0">
                     {p.id}
-                  </span>
-                  <span className="font-mono truncate">{p.consumer}</span>
-                  <span className="font-mono text-muted-foreground">
+                  </td>
+                  <td className="px-3 py-1.5 font-mono truncate max-w-0">
+                    {p.consumer}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-muted-foreground">
                     {fmtIdle(p.idleMs)}
-                  </span>
-                  <span className="font-mono text-muted-foreground">
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-muted-foreground">
                     {p.deliveryCount}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-xs px-2 justify-self-start"
-                    disabled={ackingId === p.id}
-                    onClick={() => void handleAck(p.id)}
-                  >
-                    {ackingId === p.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      "ACK"
-                    )}
-                  </Button>
-                </div>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      disabled={ackingId === p.id}
+                      onClick={() => void handleAck(p.id)}
+                    >
+                      {ackingId === p.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "ACK"
+                      )}
+                    </Button>
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -2554,64 +2557,74 @@ function StreamDashboard({
           <EmptyState label="No consumer groups" />
         ) : (
           <div className="rounded border overflow-hidden">
-            <div className="grid bg-muted/50 px-3 py-1.5 font-medium text-[11px] text-muted-foreground grid-cols-[1fr,4rem,4rem,1fr,4rem,4rem]">
-              <span>Group</span>
-              <span>Consumers</span>
-              <span>Pending</span>
-              <span>Last Delivered ID</span>
-              <span>Lag</span>
-              <span></span>
-            </div>
-            <div className="divide-y">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/50 text-[11px] font-medium text-muted-foreground">
+                  <th className="w-6 px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5 text-left">Group</th>
+                  <th className="px-3 py-1.5 text-left w-24">Consumers</th>
+                  <th className="px-3 py-1.5 text-left w-24">Pending</th>
+                  <th className="px-3 py-1.5 text-left">Last Delivered ID</th>
+                  <th className="px-3 py-1.5 text-left w-16">Lag</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
               {groups.map((g) => (
-                <div key={g.name}>
+                <Fragment key={g.name}>
+                <tr>
+                  <td colSpan={6} className="p-0">
                   <button
-                    className="w-full text-left flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent/40 transition-colors"
+                    className="w-full text-left flex items-center px-3 py-1.5 hover:bg-accent/40 transition-colors text-xs"
                     onClick={() =>
                       setExpandedGroup((p) => (p === g.name ? null : g.name))
                     }
                   >
-                    <ChevronRight
-                      className={cn(
-                        "h-3 w-3 text-muted-foreground shrink-0 transition-transform",
-                        expandedGroup === g.name && "rotate-90"
-                      )}
-                    />
-                    <span className="grid flex-1 min-w-0 gap-2 text-xs grid-cols-[1fr,4rem,4rem,1fr,4rem]">
-                      <span className="font-mono truncate">{g.name}</span>
-                      <span className="font-mono text-muted-foreground">
-                        {g.consumers}
-                      </span>
-                      <span
+                    <span className="w-6 shrink-0">
+                      <ChevronRight
                         className={cn(
-                          "font-mono",
-                          g.pending > 0
-                            ? "text-yellow-600 dark:text-yellow-400"
-                            : "text-muted-foreground"
+                          "h-3 w-3 text-muted-foreground transition-transform",
+                          expandedGroup === g.name && "rotate-90"
                         )}
-                      >
-                        {g.pending}
-                      </span>
-                      <span className="font-mono text-muted-foreground truncate">
-                        {g.lastDeliveredId || "—"}
-                      </span>
-                      <span className="font-mono text-muted-foreground">
-                        {g.lag !== null ? g.lag : "—"}
-                      </span>
+                      />
+                    </span>
+                    <span className="flex-1 min-w-0 font-mono truncate">{g.name}</span>
+                    <span className="w-24 font-mono text-muted-foreground shrink-0">
+                      {g.consumers}
+                    </span>
+                    <span
+                      className={cn(
+                        "w-24 font-mono shrink-0",
+                        g.pending > 0
+                          ? "text-yellow-600 dark:text-yellow-400"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {g.pending}
+                    </span>
+                    <span className="flex-1 min-w-0 font-mono text-muted-foreground truncate">
+                      {g.lastDeliveredId || "—"}
+                    </span>
+                    <span className="w-16 font-mono text-muted-foreground shrink-0">
+                      {g.lag !== null ? g.lag : "—"}
                     </span>
                   </button>
-                  {expandedGroup === g.name && (
-                    <div className="border-t bg-muted/10">
-                      <StreamGroupDetail
-                        dbId={dbId}
-                        stream={stream}
-                        group={g.name}
-                      />
-                    </div>
-                  )}
-                </div>
+                  </td>
+                </tr>
+                {expandedGroup === g.name && (
+                <tr>
+                  <td colSpan={6} className="p-0 border-t bg-muted/10">
+                    <StreamGroupDetail
+                      dbId={dbId}
+                      stream={stream}
+                      group={g.name}
+                    />
+                  </td>
+                </tr>
+                )}
+                </Fragment>
               ))}
-            </div>
+              </tbody>
+            </table>
           </div>
         )}
       </div>

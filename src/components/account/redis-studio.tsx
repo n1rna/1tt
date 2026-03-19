@@ -855,18 +855,24 @@ function QueryResultArea({
   error,
   loading,
 }: QueryResultAreaProps) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [detailKey, setDetailKey] = useState(0);
   const [scanKeys, setScanKeys] = useState<string[]>([]);
 
-  // Reset expanded key when result changes
+  // Reset when result changes
   useEffect(() => {
-    setExpandedKey(null);
+    setSelectedKey(null);
     if (isScanResult(result)) {
       setScanKeys(result[1] as string[]);
     } else {
       setScanKeys([]);
     }
   }, [result]);
+
+  const handleSelectKey = (key: string) => {
+    setSelectedKey(key);
+    setDetailKey((n) => n + 1);
+  };
 
   if (loading) {
     return (
@@ -893,48 +899,129 @@ function QueryResultArea({
     );
   }
 
+  // SCAN results → split view like key explorer
   if (isScanResult(result) && scanKeys.length > 0) {
     return (
-      <div className="p-3 space-y-2">
-        <p className="text-[11px] text-muted-foreground font-medium">
-          {scanKeys.length} key{scanKeys.length !== 1 ? "s" : ""} — cursor{" "}
-          <span className="font-mono">{(result as [string, string[]])[0]}</span>
-        </p>
-        <div className="space-y-1">
-          {scanKeys.map((key) => (
-            <div key={key}>
+      <div className="flex h-full overflow-hidden">
+        {/* Key list (left panel) */}
+        <div className={cn("overflow-y-auto border-r flex-shrink-0", selectedKey ? "w-1/3" : "flex-1")}>
+          <div className="px-3 py-2 border-b bg-muted/20">
+            <p className="text-[11px] text-muted-foreground font-medium">
+              {scanKeys.length} key{scanKeys.length !== 1 ? "s" : ""} — cursor{" "}
+              <span className="font-mono">{(result as [string, string[]])[0]}</span>
+            </p>
+          </div>
+          <div>
+            {scanKeys.map((key) => (
               <button
-                className="w-full text-left flex items-center gap-1.5 px-2 py-1 rounded hover:bg-accent/50 transition-colors group"
-                onClick={() =>
-                  setExpandedKey((prev) => (prev === key ? null : key))
-                }
+                key={key}
+                className={cn(
+                  "w-full text-left flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent/50 transition-colors text-xs font-mono truncate",
+                  selectedKey === key && "bg-accent/60 text-foreground"
+                )}
+                onClick={() => handleSelectKey(key)}
               >
-                <ChevronRight
-                  className={cn(
-                    "h-3 w-3 text-muted-foreground shrink-0 transition-transform",
-                    expandedKey === key && "rotate-90"
-                  )}
-                />
-                <span className="text-xs font-mono text-foreground truncate">
-                  {key}
-                </span>
+                <Database className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                <span className="truncate">{key}</span>
               </button>
-              {expandedKey === key && (
-                <div className="ml-4 mt-1 mb-2">
-                  <KeyPanel
-                    dbId={dbId}
-                    keyName={key}
-                    onClose={() => setExpandedKey(null)}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        {/* Detail panel (right) */}
+        {selectedKey && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-0">
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Key</p>
+              <p className="text-xs font-mono break-all">{selectedKey}</p>
+            </div>
+            <KeyPanel
+              key={detailKey}
+              dbId={dbId}
+              keyName={selectedKey}
+              onClose={() => setSelectedKey(null)}
+            />
+          </div>
+        )}
+
+        {/* Empty state when no key selected */}
+        {!selectedKey && scanKeys.length > 0 && (
+          <div className="hidden" />
+        )}
       </div>
     );
   }
 
+  // Structured result rendering
+  if (Array.isArray(result)) {
+    const arr = result as unknown[];
+
+    // Stream entries: Array of [string, string[]]
+    if (arr.length > 0 && Array.isArray(arr[0]) && (arr[0] as unknown[]).length === 2 && typeof (arr[0] as unknown[])[0] === "string" && Array.isArray((arr[0] as unknown[])[1])) {
+      const entries = (arr as [string, string[]][]).map(([id, fieldArr]) => {
+        const fields: Record<string, string> = {};
+        for (let i = 0; i + 1 < fieldArr.length; i += 2) {
+          fields[fieldArr[i]] = fieldArr[i + 1];
+        }
+        return { id, fields };
+      });
+      return (
+        <div className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium mb-2">{entries.length} stream entries</p>
+          <StreamViewer entries={entries} />
+        </div>
+      );
+    }
+
+    // Hash-like: flat string array with even count
+    if (arr.length > 0 && arr.length % 2 === 0 && arr.every((v) => typeof v === "string")) {
+      const strArr = arr as string[];
+      const looksLikeHash = strArr.length >= 4 && isNaN(Number(strArr[0]));
+      if (looksLikeHash) {
+        const entries: { field: string; value: string }[] = [];
+        for (let i = 0; i + 1 < strArr.length; i += 2) {
+          entries.push({ field: strArr[i], value: strArr[i + 1] });
+        }
+        return (
+          <div className="p-3">
+            <p className="text-[11px] text-muted-foreground font-medium mb-2">{entries.length} field{entries.length !== 1 ? "s" : ""}</p>
+            <HashViewer entries={entries} />
+          </div>
+        );
+      }
+    }
+
+    // Plain string array → list view
+    if (arr.length > 0 && arr.every((v) => typeof v === "string")) {
+      return (
+        <div className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium mb-2">{arr.length} item{arr.length !== 1 ? "s" : ""}</p>
+          <ListViewer items={arr as string[]} />
+        </div>
+      );
+    }
+  }
+
+  // String result
+  if (typeof result === "string") {
+    return (
+      <div className="p-3">
+        <StringViewer value={result} />
+      </div>
+    );
+  }
+
+  // Number / simple result
+  if (typeof result === "number") {
+    return (
+      <div className="p-4">
+        <span className="text-sm font-mono font-semibold">{result}</span>
+        <span className="text-xs text-muted-foreground ml-2">(integer)</span>
+      </div>
+    );
+  }
+
+  // Fallback: formatted text
   return (
     <pre className="p-4 text-xs font-mono whitespace-pre-wrap break-all text-foreground">
       {formatResult(result)}
@@ -1068,11 +1155,82 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* History panel — collapsible + resizable — ABOVE the input */}
+      {state.history.length > 0 && (
+        <div className="shrink-0 flex flex-col overflow-hidden">
+          <button
+            className="px-3 py-1.5 bg-muted/20 border-b flex items-center gap-2 hover:bg-muted/30 transition-colors"
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            <ChevronRight className={cn("h-3 w-3 text-muted-foreground/50 transition-transform", historyOpen && "rotate-90")} />
+            <Clock className="h-3 w-3 text-muted-foreground/50" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">History</span>
+            <span className="text-[10px] text-muted-foreground/40 tabular-nums">{state.history.length}</span>
+          </button>
+          {historyOpen && (
+            <div className="overflow-y-auto border-b" style={{ maxHeight: `${historyHeight}px` }}>
+              {state.history.map((h) => (
+                <div key={h.ts} className="border-b border-border/20 last:border-b-0">
+                  <div
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-accent/40 transition-colors text-left group cursor-pointer"
+                    onClick={() => setExpandedTs((prev) => prev === h.ts ? null : h.ts)}
+                  >
+                    <ChevronRight className={cn("h-2.5 w-2.5 text-muted-foreground/40 shrink-0 transition-transform", expandedTs === h.ts && "rotate-90")} />
+                    <span className="text-[11px] font-mono text-foreground truncate flex-1 min-w-0">{h.command}</span>
+                    {h.error && <span className="h-1.5 w-1.5 rounded-full bg-destructive shrink-0" />}
+                    <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                      {new Date(h.ts).toLocaleTimeString()}
+                    </span>
+                    <button
+                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onChange({ input: h.command });
+                        setTimeout(() => {
+                          const parts = parseCommand(h.command);
+                          if (parts.length === 0) return;
+                          onChange({ running: true, error: null, result: undefined, input: h.command });
+                          executeCommand(dbId, parts).then((res) => {
+                            const output = res.error ? `(error) ${res.error}` : formatResult(res.result);
+                            const entry: HistoryEntry = { command: h.command, result: output, error: !!res.error, ts: Date.now() };
+                            onChange({ running: false, result: res.error ? undefined : res.result, error: res.error ? `(error) ${res.error}` : null, history: [entry, ...state.history].slice(0, 50), historyIndex: -1, input: "" });
+                          }).catch((err) => {
+                            const msg = err instanceof Error ? err.message : "Unknown error";
+                            const entry: HistoryEntry = { command: h.command, result: `(error) ${msg}`, error: true, ts: Date.now() };
+                            onChange({ running: false, result: undefined, error: `(error) ${msg}`, history: [entry, ...state.history].slice(0, 50), historyIndex: -1, input: "" });
+                          });
+                        }, 0);
+                      }}
+                      title="Re-run this command"
+                    >
+                      <RotateCw className="h-3 w-3 text-muted-foreground/50 hover:text-foreground" />
+                    </button>
+                  </div>
+                  {expandedTs === h.ts && (
+                    <div className={cn("px-3 py-2 pl-8 text-[11px] font-mono whitespace-pre-wrap break-all bg-muted/10", h.error ? "text-destructive" : "text-foreground/60")}>
+                      {h.result}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Resize handle */}
+          {historyOpen && (
+            <div
+              onMouseDown={handleHistoryResize}
+              className="h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors flex items-center justify-center group"
+              title="Drag to resize"
+            >
+              <GripHorizontal className="h-2.5 w-2.5 text-muted-foreground/30 group-hover:text-muted-foreground/60" />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input row */}
       <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b bg-muted/10">
-        <span className="text-xs font-mono text-muted-foreground shrink-0">
-          {">"}
-        </span>
+        <span className="text-xs font-mono text-muted-foreground shrink-0">{">"}</span>
         <input
           ref={inputRef}
           key={tabId}
@@ -1088,192 +1246,37 @@ function QueryTab({ dbId, tabId, state, onChange, disabled, aiEnabled, aiSession
           autoCapitalize="off"
           autoFocus
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={() => void runCommand()}
-          disabled={state.running || !state.input.trim() || disabled}
-          title="Run command"
-        >
-          {state.running ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => void runCommand()} disabled={state.running || !state.input.trim() || disabled} title="Run command">
+          {state.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
         </Button>
       </div>
 
       {/* AI Assistant — collapsible */}
       {aiEnabled && (
         <>
-          <button
-            className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b hover:bg-muted/30 transition-colors"
-            onClick={() => setAiBarOpen((v) => !v)}
-          >
+          <button className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b hover:bg-muted/30 transition-colors" onClick={() => setAiBarOpen((v) => !v)}>
             <Sparkles className={cn("h-3 w-3", aiBarOpen ? "text-primary" : "text-muted-foreground/50")} />
-            <span className={cn("text-xs font-medium", aiBarOpen ? "text-primary" : "text-muted-foreground/50")}>
-              AI Assistant
-            </span>
+            <span className={cn("text-xs font-medium", aiBarOpen ? "text-primary" : "text-muted-foreground/50")}>AI Assistant</span>
             {aiSession && aiSession.entries.length > 0 && (
-              <span className="text-[10px] text-muted-foreground/40 tabular-nums">
-                {aiSession.entries.length} {aiSession.entries.length === 1 ? "prompt" : "prompts"}
-              </span>
+              <span className="text-[10px] text-muted-foreground/40 tabular-nums">{aiSession.entries.length} {aiSession.entries.length === 1 ? "prompt" : "prompts"}</span>
             )}
           </button>
-          <div
-            className="grid transition-[grid-template-rows] duration-200 ease-in-out shrink-0"
-            style={{ gridTemplateRows: aiBarOpen ? "1fr" : "0fr" }}
-          >
+          <div className="grid transition-[grid-template-rows] duration-200 ease-in-out shrink-0" style={{ gridTemplateRows: aiBarOpen ? "1fr" : "0fr" }}>
             <div className="overflow-hidden">
-              <AiQueryBar
-                schema={[]}
-                dialect="redis"
-                onSqlGenerated={(cmd) => onChange({ input: cmd })}
-                aiEnabled={aiEnabled}
-                aiSession={aiSession}
-                onAiSessionChange={onAiSessionChange}
-                getEditorContent={() => state.input}
-                lastQuerySummary={
-                  state.result !== undefined
-                    ? formatResult(state.result).slice(0, 100)
-                    : undefined
-                }
-              />
+              <AiQueryBar schema={[]} dialect="redis" onSqlGenerated={(cmd) => onChange({ input: cmd })} aiEnabled={aiEnabled} aiSession={aiSession} onAiSessionChange={onAiSessionChange} getEditorContent={() => state.input} lastQuerySummary={state.result !== undefined ? formatResult(state.result).slice(0, 100) : undefined} />
             </div>
           </div>
         </>
       )}
 
-      {/* Main area: split between result and history */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Current result */}
-        <div className="flex-1 overflow-y-auto" ref={resultRef}>
-          {state.result === undefined && !state.error && !state.running ? (
-            <div className="flex items-center justify-center h-full text-xs text-muted-foreground/50">
-              Run a command to see results
-            </div>
-          ) : (
-            <QueryResultArea
-              dbId={dbId}
-              result={state.result}
-              error={state.error}
-              loading={state.running}
-            />
-          )}
-        </div>
-
-        {/* History panel — collapsible + resizable */}
-        {state.history.length > 0 && (
-          <div className="shrink-0 flex flex-col overflow-hidden">
-            {/* Resize handle (only when expanded) */}
-            {historyOpen && (
-              <div
-                onMouseDown={handleHistoryResize}
-                className="h-1 shrink-0 cursor-row-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors flex items-center justify-center group"
-                title="Drag to resize"
-              >
-                <GripHorizontal className="h-2.5 w-2.5 text-muted-foreground/30 group-hover:text-muted-foreground/60" />
-              </div>
-            )}
-
-            {/* Header — click to toggle */}
-            <button
-              className="px-3 py-1.5 bg-muted/20 border-t border-b flex items-center gap-2 hover:bg-muted/30 transition-colors"
-              onClick={() => setHistoryOpen((v) => !v)}
-            >
-              <ChevronRight
-                className={cn(
-                  "h-3 w-3 text-muted-foreground/50 transition-transform",
-                  historyOpen && "rotate-90"
-                )}
-              />
-              <Clock className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                History
-              </span>
-              <span className="text-[10px] text-muted-foreground/40 tabular-nums">
-                {state.history.length}
-              </span>
-            </button>
-
-            {/* History list */}
-            {historyOpen && (
-              <div className="overflow-y-auto" style={{ height: `${historyHeight}px` }}>
-                {state.history.map((h) => (
-                  <div key={h.ts} className="border-b border-border/20 last:border-b-0">
-                    <div
-                      className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-accent/40 transition-colors text-left group cursor-pointer"
-                      onClick={() => setExpandedTs((prev) => prev === h.ts ? null : h.ts)}
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "h-2.5 w-2.5 text-muted-foreground/40 shrink-0 transition-transform",
-                          expandedTs === h.ts && "rotate-90"
-                        )}
-                      />
-                      <span className="text-[11px] font-mono text-foreground truncate flex-1 min-w-0">
-                        {h.command}
-                      </span>
-                      {h.error && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-destructive shrink-0" />
-                      )}
-                      <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
-                        {new Date(h.ts).toLocaleTimeString()}
-                      </span>
-                      <button
-                        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onChange({ input: h.command });
-                          // Trigger run
-                          setTimeout(() => {
-                            const parts = parseCommand(h.command);
-                            if (parts.length === 0) return;
-                            onChange({ running: true, error: null, result: undefined, input: h.command });
-                            executeCommand(dbId, parts).then((res) => {
-                              const output = res.error ? `(error) ${res.error}` : formatResult(res.result);
-                              const entry: HistoryEntry = { command: h.command, result: output, error: !!res.error, ts: Date.now() };
-                              onChange({
-                                running: false,
-                                result: res.error ? undefined : res.result,
-                                error: res.error ? `(error) ${res.error}` : null,
-                                history: [entry, ...state.history].slice(0, 50),
-                                historyIndex: -1,
-                                input: "",
-                              });
-                            }).catch((err) => {
-                              const msg = err instanceof Error ? err.message : "Unknown error";
-                              const entry: HistoryEntry = { command: h.command, result: `(error) ${msg}`, error: true, ts: Date.now() };
-                              onChange({
-                                running: false,
-                                result: undefined,
-                                error: `(error) ${msg}`,
-                                history: [entry, ...state.history].slice(0, 50),
-                                historyIndex: -1,
-                                input: "",
-                              });
-                            });
-                          }, 0);
-                        }}
-                        title="Re-run this command"
-                      >
-                        <RotateCw className="h-3 w-3 text-muted-foreground/50 hover:text-foreground" />
-                      </button>
-                    </div>
-                    {expandedTs === h.ts && (
-                      <div className={cn(
-                        "px-3 py-2 pl-8 text-[11px] font-mono whitespace-pre-wrap break-all bg-muted/10",
-                        h.error ? "text-destructive" : "text-foreground/60"
-                      )}>
-                        {h.result}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* Result area */}
+      <div className="flex-1 overflow-y-auto" ref={resultRef}>
+        {state.result === undefined && !state.error && !state.running ? (
+          <div className="flex items-center justify-center h-full text-xs text-muted-foreground/50">
+            Run a command to see results
           </div>
+        ) : (
+          <QueryResultArea dbId={dbId} result={state.result} error={state.error} loading={state.running} />
         )}
       </div>
     </div>
@@ -1699,34 +1702,37 @@ function MonitorTab({ dbId }: MonitorTabProps) {
 
             {/* Snapshots table */}
             <div className="rounded border overflow-hidden">
-              <div className="grid grid-cols-[1fr,auto,auto,auto,auto] bg-muted/50 px-3 py-1.5 text-[11px] font-medium text-muted-foreground gap-4">
-                <span>Time</span>
-                <span className="text-right">Keys</span>
-                <span className="text-right">Memory</span>
-                <span className="text-right">Ops/sec</span>
-                <span className="text-right">Clients</span>
-              </div>
-              <div className="divide-y max-h-96 overflow-y-auto">
-                {snapshots.map((snap) => (
-                  <div
-                    key={snap.ts}
-                    className="grid grid-cols-[1fr,auto,auto,auto,auto] px-3 py-1.5 text-xs gap-4"
-                  >
-                    <span className="font-mono text-muted-foreground">
-                      {new Date(snap.ts).toLocaleTimeString()}
-                    </span>
-                    <span className="font-mono text-right">{snap.keys}</span>
-                    <span className="font-mono text-right">
-                      {formatBytes(snap.usedMemory)}
-                    </span>
-                    <span className="font-mono text-right">
-                      {snap.opsPerSec.toFixed(1)}
-                    </span>
-                    <span className="font-mono text-right">
-                      {snap.connectedClients}
-                    </span>
-                  </div>
-                ))}
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0">
+                    <tr className="bg-muted/50 text-[11px] font-medium text-muted-foreground">
+                      <th className="px-3 py-1.5 text-left">Time</th>
+                      <th className="px-3 py-1.5 text-right w-20">Keys</th>
+                      <th className="px-3 py-1.5 text-right w-24">Memory</th>
+                      <th className="px-3 py-1.5 text-right w-20">Ops/sec</th>
+                      <th className="px-3 py-1.5 text-right w-20">Clients</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {snapshots.map((snap) => (
+                      <tr key={snap.ts}>
+                        <td className="px-3 py-1.5 font-mono text-muted-foreground">
+                          {new Date(snap.ts).toLocaleTimeString()}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono text-right">{snap.keys}</td>
+                        <td className="px-3 py-1.5 font-mono text-right">
+                          {formatBytes(snap.usedMemory)}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono text-right">
+                          {snap.opsPerSec.toFixed(1)}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono text-right">
+                          {snap.connectedClients}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
