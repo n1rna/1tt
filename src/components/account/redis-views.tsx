@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import {
   Check,
   ChevronRight,
   Loader2,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { executeCommand, executePipeline } from "@/lib/redis";
@@ -2053,7 +2054,9 @@ export function KeyNamespaceView({ dbId }: { dbId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [detailKey, setDetailKey] = useState(0); // increment to re-mount detail panel
+  const [detailKey, setDetailKey] = useState(0);
+  const [splitPct, setSplitPct] = useState(50);
+  const splitRef = useRef<HTMLDivElement>(null);
 
   const scan = useCallback(async () => {
     setScanning(true);
@@ -2114,6 +2117,30 @@ export function KeyNamespaceView({ dbId }: { dbId: string }) {
     setDetailKey((n) => n + 1);
   };
 
+  const handleSplitResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = splitRef.current;
+    if (!container) return;
+    const startX = e.clientX;
+    const startPct = splitPct;
+    const rect = container.getBoundingClientRect();
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const newPct = startPct + (delta / rect.width) * 100;
+      setSplitPct(Math.max(20, Math.min(80, newPct)));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [splitPct]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top bar */}
@@ -2170,13 +2197,11 @@ export function KeyNamespaceView({ dbId }: { dbId: string }) {
           <LoadingState label="Scanning keyspace…" />
         </div>
       ) : (
-        <div className="flex-1 flex overflow-hidden">
+        <div ref={splitRef} className="flex-1 flex overflow-hidden">
           {/* Tree panel */}
           <div
-            className={cn(
-              "overflow-y-auto border-r flex-shrink-0",
-              selectedKey ? "w-1/2" : "flex-1"
-            )}
+            className="overflow-y-auto flex-shrink-0"
+            style={{ width: selectedKey ? `${splitPct}%` : "100%" }}
           >
             {allKeys.length === 0 ? (
               <div className="flex items-center justify-center h-full">
@@ -2184,17 +2209,8 @@ export function KeyNamespaceView({ dbId }: { dbId: string }) {
               </div>
             ) : (
               <>
-                <div className="px-2 py-1">
-                  <NamespaceTreeNode
-                    node={filteredTree}
-                    depth={0}
-                    selectedKey={selectedKey}
-                    onSelectKey={handleSelectKey}
-                  />
-                </div>
-                {/* Stats bar */}
                 {topNamespaces.length > 0 && (
-                  <div className="border-t px-3 py-2 bg-muted/20">
+                  <div className="border-b px-3 py-2 bg-muted/20">
                     <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
                       Top namespaces
                     </p>
@@ -2208,26 +2224,51 @@ export function KeyNamespaceView({ dbId }: { dbId: string }) {
                     </div>
                   </div>
                 )}
+                <div className="px-2 py-1">
+                  <NamespaceTreeNode
+                    node={filteredTree}
+                    depth={0}
+                    selectedKey={selectedKey}
+                    onSelectKey={handleSelectKey}
+                  />
+                </div>
               </>
             )}
           </div>
 
-          {/* Detail panel */}
+          {/* Resize handle + Detail panel */}
           {selectedKey && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-0">
-              <div>
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                  Key
-                </p>
-                <p className="text-xs font-mono break-all">{selectedKey}</p>
-              </div>
-              <KeyDetail
-                key={detailKey}
-                dbId={dbId}
-                keyName={selectedKey}
-                onDelete={handleKeyDeleted}
+            <>
+              <div
+                onMouseDown={handleSplitResize}
+                className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-ring transition-colors"
               />
-            </div>
+              <div className="flex-1 overflow-y-auto min-w-0 flex flex-col">
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/20 shrink-0">
+                  <div>
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Key</p>
+                    <p className="text-xs font-mono break-all">{selectedKey}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => setSelectedKey(null)}
+                    title="Close panel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <KeyDetail
+                    key={detailKey}
+                    dbId={dbId}
+                    keyName={selectedKey}
+                    onDelete={handleKeyDeleted}
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}
