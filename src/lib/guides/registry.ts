@@ -158,6 +158,26 @@ export const guides: GuideDefinition[] = [
       "redis commands",
     ],
   },
+  {
+    slug: "csv-viewer",
+    title: "CSV Viewer with Dataset Splitting",
+    description:
+      "Open, filter, sort, and edit CSV files in the browser — then split them into train/test sets for machine learning with one click.",
+    icon: "FileSpreadsheet",
+    relatedTools: ["csv"],
+    keywords: [
+      "csv viewer",
+      "csv editor",
+      "csv splitter",
+      "train test split",
+      "dataset split",
+      "csv filter",
+      "csv sort",
+      "csv export",
+      "machine learning data",
+      "data preparation",
+    ],
+  },
 ];
 
 export function getGuideBySlug(slug: string): GuideDefinition | undefined {
