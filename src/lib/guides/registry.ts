@@ -197,6 +197,25 @@ export const guides: GuideDefinition[] = [
       "remote planning",
     ],
   },
+  {
+    slug: "database-tunnel",
+    title: "Connect Any Database via Tunnel",
+    description:
+      "Use the 1tt CLI to create a secure tunnel from your local PostgreSQL or Redis to the web-based studio — no port forwarding or VPN needed.",
+    icon: "Globe",
+    relatedTools: ["database-studio", "redis-studio"],
+    keywords: [
+      "tunnel",
+      "cli",
+      "connect",
+      "local database",
+      "remote database",
+      "websocket",
+      "proxy",
+      "pgadmin alternative",
+      "redis gui",
+    ],
+  },
 ];
 
 export function getGuideBySlug(slug: string): GuideDefinition | undefined {

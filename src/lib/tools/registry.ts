@@ -361,6 +361,22 @@ export const tools: ToolDefinition[] = [
     keywords: ["planning poker", "agile", "scrum", "story points", "estimation", "sprint", "fibonacci", "team", "vote", "realtime"],
     requiresAuth: true,
   },
+  {
+    slug: "database-studio",
+    name: "Database Studio",
+    description: "Connect to PostgreSQL databases and run queries, browse schemas, and manage data from the browser",
+    category: "data",
+    icon: "Database",
+    keywords: ["database", "studio", "postgresql", "postgres", "sql", "query", "schema", "tables", "pgadmin", "database client"],
+  },
+  {
+    slug: "redis-studio",
+    name: "Redis Studio",
+    description: "Browse keys, run commands, monitor performance, and manage consumer groups in Redis — all from the browser",
+    category: "data",
+    icon: "Database",
+    keywords: ["redis", "studio", "key value", "cache", "commands", "monitor", "streams", "consumer groups", "upstash"],
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {
