@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Database,
   ChevronLeft,
+  ChevronRight,
   Link2,
   BarChart3,
   Activity,
@@ -11,6 +12,11 @@ import {
   X,
   BookOpen,
   Globe,
+  Clock,
+  GripHorizontal,
+  Play,
+  Sparkles,
+  RotateCw,
 } from "lucide-react";
 import { ToolInfo } from "@/components/layout/tool-info";
 import { toolMetadata, toolJsonLd } from "@/lib/tools/seo";
@@ -191,168 +197,95 @@ export default function RedisStudioPage() {
                   <div className="flex-1" />
                 </div>
 
-                {/* Terminal scrollback */}
-                <div className="flex-1 overflow-auto bg-background p-3 space-y-3 font-mono text-xs">
-                  {/* Command 1: SCAN */}
-                  <div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground shrink-0">&gt;</span>
-                      <span className="text-foreground">
-                        SCAN 0 MATCH{" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          user:*
-                        </span>{" "}
-                        COUNT 20
-                      </span>
+                {/* QueryTab - exact replica of real layout */}
+                <div className="flex flex-col h-full overflow-hidden">
+                  {/* History panel (collapsed) */}
+                  <div className="shrink-0 flex flex-col overflow-hidden">
+                    <div className="px-3 py-1.5 bg-muted/20 border-b flex items-center gap-2">
+                      <ChevronRight className="h-3 w-3 text-muted-foreground/50 rotate-90" />
+                      <Clock className="h-3 w-3 text-muted-foreground/50" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">History</span>
+                      <span className="text-[10px] text-muted-foreground/40 tabular-nums">3</span>
                     </div>
-                    <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
-                      <div>
-                        1){" "}
-                        <span className="text-yellow-600 dark:text-yellow-400">
-                          &quot;14&quot;
-                        </span>
-                      </div>
-                      <div>
-                        2) 1){" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          &quot;user:1001&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;&nbsp;&nbsp;2){" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          &quot;user:1002&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;&nbsp;&nbsp;3){" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          &quot;user:1003&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;&nbsp;&nbsp;4){" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          &quot;user:1004&quot;
-                        </span>
-                      </div>
+                    <div className="overflow-y-auto border-b" style={{ maxHeight: "120px" }}>
+                      {[
+                        { cmd: "SCAN 0 MATCH user:* COUNT 20", time: "14:23:01" },
+                        { cmd: "HGETALL user:1001", time: "14:23:08" },
+                        { cmd: "TTL user:1001", time: "14:23:15" },
+                      ].map((h, i) => (
+                        <div key={i} className="border-b border-border/20 last:border-b-0">
+                          <div className="w-full flex items-center gap-2 px-3 py-1.5 text-left group">
+                            <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/40 shrink-0" />
+                            <span className="text-[11px] font-mono text-foreground truncate flex-1 min-w-0">{h.cmd}</span>
+                            <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">{h.time}</span>
+                            <RotateCw className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="h-1 shrink-0 flex items-center justify-center">
+                      <GripHorizontal className="h-2.5 w-2.5 text-muted-foreground/30" />
                     </div>
                   </div>
 
-                  {/* Command 2: HGETALL */}
-                  <div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground shrink-0">&gt;</span>
-                      <span className="text-foreground">
-                        HGETALL{" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          user:1001
-                        </span>
-                      </span>
-                    </div>
-                    <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
-                      <div>
-                        &nbsp;1){" "}
-                        <span className="text-blue-500 dark:text-blue-400">
-                          &quot;name&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;2){" "}
-                        <span className="text-yellow-600 dark:text-yellow-400">
-                          &quot;Alice Chen&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;3){" "}
-                        <span className="text-blue-500 dark:text-blue-400">
-                          &quot;email&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;4){" "}
-                        <span className="text-yellow-600 dark:text-yellow-400">
-                          &quot;alice@startup.io&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;5){" "}
-                        <span className="text-blue-500 dark:text-blue-400">
-                          &quot;role&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;6){" "}
-                        <span className="text-yellow-600 dark:text-yellow-400">
-                          &quot;admin&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;7){" "}
-                        <span className="text-blue-500 dark:text-blue-400">
-                          &quot;last_login&quot;
-                        </span>
-                      </div>
-                      <div>
-                        &nbsp;8){" "}
-                        <span className="text-yellow-600 dark:text-yellow-400">
-                          &quot;1710864000&quot;
-                        </span>
-                      </div>
+                  {/* Input row */}
+                  <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b bg-muted/10">
+                    <span className="text-xs font-mono text-muted-foreground shrink-0">&gt;</span>
+                    <span className="flex-1 text-xs font-mono text-muted-foreground/50">Enter a Redis command (e.g. SCAN 0 MATCH * COUNT 20)</span>
+                    <div className="h-7 w-7 shrink-0 flex items-center justify-center">
+                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                   </div>
 
-                  {/* Command 3: TTL */}
-                  <div>
-                    <div className="flex items-start gap-2">
-                      <span className="text-muted-foreground shrink-0">&gt;</span>
-                      <span className="text-foreground">
-                        TTL{" "}
-                        <span className="text-green-600 dark:text-green-400">
-                          user:1001
-                        </span>
-                      </span>
-                    </div>
-                    <div className="mt-1 ml-4 text-muted-foreground">
-                      (integer){" "}
-                      <span className="text-yellow-600 dark:text-yellow-400">
-                        3540
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Command input + history */}
-                <div className="border-t bg-muted/10 shrink-0">
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <span className="text-muted-foreground font-mono text-xs shrink-0">
-                      &gt;
-                    </span>
-                    <div className="flex-1 rounded border bg-background px-3 py-1.5 text-xs font-mono text-muted-foreground">
-                      Enter a Redis command&hellip;
-                    </div>
-                    <div className="rounded bg-foreground text-background text-xs px-3 py-1.5 font-medium shrink-0">
-                      Run
-                    </div>
+                  {/* AI Assistant toggle */}
+                  <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-b">
+                    <Sparkles className="h-3 w-3 text-muted-foreground/50" />
+                    <span className="text-xs font-medium text-muted-foreground/50">AI Assistant</span>
                   </div>
 
-                  {/* History strip */}
-                  <div className="px-3 pb-2 flex items-center gap-2 overflow-x-auto">
-                    <span className="text-[10px] text-muted-foreground shrink-0 font-semibold">
-                      History 3
-                    </span>
-                    {[
-                      "TTL user:1001",
-                      "HGETALL user:1001",
-                      "SCAN 0 MATCH user:* COUNT 20",
-                    ].map((cmd) => (
-                      <span
-                        key={cmd}
-                        className="text-[10px] font-mono text-muted-foreground bg-muted/40 border rounded px-1.5 py-0.5 whitespace-nowrap shrink-0"
-                      >
-                        {cmd}
-                      </span>
-                    ))}
+                  {/* Result area - scrollback */}
+                  <div className="flex-1 overflow-auto p-3 space-y-3 font-mono text-xs">
+                    {/* SCAN result */}
+                    <div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">&gt;</span>
+                        <span className="text-foreground">SCAN 0 MATCH <span className="text-green-600 dark:text-green-400">user:*</span> COUNT 20</span>
+                      </div>
+                      <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
+                        <div>1) <span className="text-yellow-600 dark:text-yellow-400">&quot;14&quot;</span></div>
+                        <div>2) 1) <span className="text-green-600 dark:text-green-400">&quot;user:1001&quot;</span></div>
+                        <div>&nbsp;&nbsp;&nbsp;2) <span className="text-green-600 dark:text-green-400">&quot;user:1002&quot;</span></div>
+                        <div>&nbsp;&nbsp;&nbsp;3) <span className="text-green-600 dark:text-green-400">&quot;user:1003&quot;</span></div>
+                        <div>&nbsp;&nbsp;&nbsp;4) <span className="text-green-600 dark:text-green-400">&quot;user:1004&quot;</span></div>
+                      </div>
+                    </div>
+
+                    {/* HGETALL result */}
+                    <div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">&gt;</span>
+                        <span className="text-foreground">HGETALL <span className="text-green-600 dark:text-green-400">user:1001</span></span>
+                      </div>
+                      <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
+                        <div>&nbsp;1) <span className="text-blue-500 dark:text-blue-400">&quot;name&quot;</span></div>
+                        <div>&nbsp;2) <span className="text-yellow-600 dark:text-yellow-400">&quot;Alice Chen&quot;</span></div>
+                        <div>&nbsp;3) <span className="text-blue-500 dark:text-blue-400">&quot;email&quot;</span></div>
+                        <div>&nbsp;4) <span className="text-yellow-600 dark:text-yellow-400">&quot;alice@startup.io&quot;</span></div>
+                        <div>&nbsp;5) <span className="text-blue-500 dark:text-blue-400">&quot;role&quot;</span></div>
+                        <div>&nbsp;6) <span className="text-yellow-600 dark:text-yellow-400">&quot;admin&quot;</span></div>
+                        <div>&nbsp;7) <span className="text-blue-500 dark:text-blue-400">&quot;last_login&quot;</span></div>
+                        <div>&nbsp;8) <span className="text-yellow-600 dark:text-yellow-400">&quot;1710864000&quot;</span></div>
+                      </div>
+                    </div>
+
+                    {/* TTL result */}
+                    <div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground shrink-0">&gt;</span>
+                        <span className="text-foreground">TTL <span className="text-green-600 dark:text-green-400">user:1001</span></span>
+                      </div>
+                      <div className="mt-1 ml-4 text-muted-foreground">(integer) <span className="text-yellow-600 dark:text-yellow-400">3540</span></div>
+                    </div>
                   </div>
                 </div>
               </div>
