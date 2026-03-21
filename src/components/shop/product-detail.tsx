@@ -103,7 +103,7 @@ function ProductImageViewer({
           <img
             src={currentImage.url}
             alt={productTitle}
-            className="w-full h-full object-cover transition-transform duration-200"
+            className="w-full h-full object-contain transition-transform duration-200"
             style={hoverZoom ? {
               transformOrigin: `${hoverPos.x}% ${hoverPos.y}%`,
               transform: "scale(2)",
