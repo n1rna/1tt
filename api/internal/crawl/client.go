@@ -44,6 +44,17 @@ type CrawlPage struct {
 	StatusCode int
 }
 
+// CrawlResults holds both successfully crawled pages and error details.
+type CrawlResults struct {
+	Pages       []CrawlPage
+	TotalRecords int
+	ErroredCount int
+	// FirstError contains details of the first errored page (for error reporting).
+	FirstErrorURL    string
+	FirstErrorStatus int
+	FirstErrorBody   string // truncated markdown from the error page
+}
+
 // NewClient creates a new Cloudflare crawl client.
 func NewClient(accountID, apiToken string) *Client {
 	return &Client{
@@ -159,8 +170,8 @@ func (c *Client) GetStatus(ctx context.Context, jobID string) (*CrawlStatus, err
 }
 
 // GetResults paginates through all completed crawl results and returns them.
-func (c *Client) GetResults(ctx context.Context, jobID string) ([]CrawlPage, error) {
-	var pages []CrawlPage
+func (c *Client) GetResults(ctx context.Context, jobID string) (*CrawlResults, error) {
+	result := &CrawlResults{}
 	var cursor int
 
 	for {
@@ -207,10 +218,22 @@ func (c *Client) GetResults(ctx context.Context, jobID string) ([]CrawlPage, err
 		}
 
 		for _, r := range envelope.Result.Records {
+			result.TotalRecords++
 			if r.Status != "completed" {
+				result.ErroredCount++
+				// Capture first error details for reporting
+				if result.FirstErrorURL == "" {
+					result.FirstErrorURL = r.URL
+					result.FirstErrorStatus = r.Metadata.Status
+					body := r.Markdown
+					if len(body) > 200 {
+						body = body[:200]
+					}
+					result.FirstErrorBody = body
+				}
 				continue
 			}
-			pages = append(pages, CrawlPage{
+			result.Pages = append(result.Pages, CrawlPage{
 				URL:        r.URL,
 				Markdown:   r.Markdown,
 				Title:      r.Metadata.Title,
@@ -225,7 +248,7 @@ func (c *Client) GetResults(ctx context.Context, jobID string) ([]CrawlPage, err
 		cursor = envelope.Result.Cursor
 	}
 
-	return pages, nil
+	return result, nil
 }
 
 // NormalizeURL strips scheme, www prefix, and trailing slash, and lowercases the host.

@@ -288,10 +288,21 @@ func (s *Service) runJob(ctx context.Context, jobID string) error {
 			}
 
 			// Fetch all pages
-			var resultsErr error
-			pages, resultsErr = s.crawlClient.GetResults(ctx, cfJobID)
+			crawlResults, resultsErr := s.crawlClient.GetResults(ctx, cfJobID)
 			if resultsErr != nil {
 				return fmt.Errorf("get crawl results: %w", resultsErr)
+			}
+			pages = crawlResults.Pages
+
+			// If no usable pages were returned, check why
+			if len(pages) == 0 && crawlResults.TotalRecords > 0 {
+				if crawlResults.FirstErrorStatus == 403 {
+					return fmt.Errorf("the website blocked our crawler (HTTP 403). The site may have bot protection enabled. Try a different URL or contact the site owner")
+				}
+				if crawlResults.FirstErrorStatus > 0 {
+					return fmt.Errorf("the website returned HTTP %d for all %d pages. The site may be down or blocking automated access", crawlResults.FirstErrorStatus, crawlResults.TotalRecords)
+				}
+				return fmt.Errorf("crawled %d pages but none returned usable content", crawlResults.TotalRecords)
 			}
 		}
 
