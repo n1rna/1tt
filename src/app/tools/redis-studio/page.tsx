@@ -34,155 +34,219 @@ export default function RedisStudioPage() {
         />
       ))}
       <ToolLayout slug="redis-studio">
-        {/* Hero mockup */}
-        <div className="rounded-xl border bg-muted/20 overflow-hidden mb-8">
-          <div className="flex h-64 sm:h-80">
-            {/* Key list sidebar */}
-            <div className="w-48 border-r bg-muted/30 p-3 shrink-0 hidden sm:block">
-              <div className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
-                Keys
-              </div>
-              <div className="mb-2">
-                <div className="rounded border bg-background px-2 py-1 text-xs text-muted-foreground font-mono">
-                  *
-                </div>
-              </div>
-              <div className="space-y-0.5">
-                {[
-                  { key: "session:usr:1a2b", type: "hash" },
-                  { key: "queue:jobs", type: "list" },
-                  { key: "rate:192.168.1.1", type: "string" },
-                  { key: "leaderboard", type: "zset" },
-                  { key: "online:users", type: "set" },
-                ].map(({ key, type }, i) => (
-                  <div
-                    key={key}
-                    className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${i === 0 ? "bg-primary/10 text-foreground font-medium" : "text-muted-foreground"}`}
-                  >
-                    <span
-                      className={`shrink-0 rounded px-1 text-[9px] font-semibold uppercase ${
-                        type === "hash"
-                          ? "bg-blue-500/15 text-blue-500"
-                          : type === "list"
-                            ? "bg-orange-500/15 text-orange-500"
-                            : type === "string"
-                              ? "bg-green-500/15 text-green-500"
-                              : type === "zset"
-                                ? "bg-purple-500/15 text-purple-500"
-                                : "bg-pink-500/15 text-pink-500"
-                      }`}
-                    >
-                      {type}
-                    </span>
-                    <span className="truncate font-mono">{key}</span>
-                  </div>
-                ))}
-              </div>
+        {/* Split hero */}
+        <div className="flex flex-col lg:flex-row gap-6 mb-10">
+          {/* Left: Studio mockup (60%) */}
+          <div className="lg:w-[60%] rounded-xl border bg-muted/10 overflow-hidden flex flex-col shrink-0">
+            {/* Window chrome */}
+            <div className="flex items-center gap-1.5 px-4 py-2.5 border-b bg-muted/20 shrink-0">
+              <div className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
+              <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/70" />
+              <div className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
+              <span className="ml-3 text-xs text-muted-foreground font-mono">
+                redis-studio — redis://upstash.io:6379
+              </span>
             </div>
 
-            {/* Main panel */}
-            <div className="flex-1 flex flex-col min-w-0">
-              {/* Key detail / command area */}
-              <div className="border-b px-4 py-2.5 bg-muted/10 flex items-center gap-2">
-                <span className="rounded px-1 text-[9px] font-semibold uppercase bg-blue-500/15 text-blue-500 shrink-0">
-                  hash
-                </span>
-                <span className="text-xs font-mono text-foreground truncate">
-                  session:usr:1a2b
-                </span>
-                <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                  TTL: 3 540s
-                </span>
-              </div>
-
-              {/* Hash fields */}
-              <div className="flex-1 overflow-auto p-3 space-y-1">
-                <div className="rounded border overflow-hidden text-xs">
-                  <div className="grid grid-cols-2 bg-muted/50 font-medium text-muted-foreground border-b">
-                    <div className="px-3 py-2">Field</div>
-                    <div className="px-3 py-2">Value</div>
-                  </div>
+            <div className="flex flex-1 min-h-0" style={{ height: "420px" }}>
+              {/* Sidebar */}
+              <div className="w-44 border-r bg-muted/20 flex flex-col shrink-0">
+                {/* Nav items */}
+                <div className="px-2 pt-3 pb-2 border-b space-y-0.5">
                   {[
-                    ["user_id", "usr_1a2b3c4d"],
-                    ["email", "alice@example.com"],
-                    ["role", "admin"],
-                    ["last_seen", "1710864000"],
-                  ].map(([field, value]) => (
+                    { label: "Metrics", active: false },
+                    { label: "Monitor", active: false },
+                    { label: "New Query", active: false },
+                  ].map(({ label, active }) => (
                     <div
-                      key={field}
-                      className="grid grid-cols-2 border-b last:border-0 hover:bg-muted/30 transition-colors"
+                      key={label}
+                      className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${active ? "bg-primary/10 text-foreground font-medium" : "text-muted-foreground hover:bg-muted/40"}`}
                     >
-                      <div className="px-3 py-2 font-mono text-muted-foreground">
-                        {field}
-                      </div>
-                      <div className="px-3 py-2 font-mono text-foreground">
-                        {value}
-                      </div>
+                      <div className="h-1.5 w-1.5 rounded-full bg-current shrink-0 opacity-60" />
+                      {label}
                     </div>
                   ))}
                 </div>
 
-                {/* Command input */}
-                <div className="flex gap-2 items-center mt-3">
-                  <div className="flex-1 rounded border bg-background px-3 py-1.5 text-xs font-mono text-muted-foreground">
-                    HGET session:usr:1a2b role
+                {/* Views section */}
+                <div className="px-2 pt-2.5 pb-2 flex-1">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
+                    Views
                   </div>
-                  <button className="rounded bg-foreground text-background text-xs px-3 py-1.5 font-medium">
-                    Run
-                  </button>
+                  <div className="space-y-0.5">
+                    {[
+                      { label: "Key Explorer", active: false },
+                      { label: "Stream Groups", active: false },
+                      { label: "BullMQ", active: false },
+                      { label: "Sidekiq", active: false },
+                      { label: "Celery", active: false },
+                    ].map(({ label, active }) => (
+                      <div
+                        key={label}
+                        className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${active ? "bg-primary/10 text-foreground font-medium" : "text-muted-foreground hover:bg-muted/40"}`}
+                      >
+                        {label}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="rounded bg-muted/50 px-3 py-1.5 text-xs font-mono text-green-600 dark:text-green-400">
-                  &quot;admin&quot;
+
+                {/* Connection info */}
+                <div className="border-t px-3 py-2">
+                  <div className="text-[10px] text-muted-foreground font-mono truncate">
+                    db0 · 24 keys
+                  </div>
+                </div>
+              </div>
+
+              {/* Main panel */}
+              <div className="flex-1 flex flex-col min-w-0">
+                {/* Tab bar */}
+                <div className="flex items-end border-b bg-muted/10 px-3 pt-2 gap-1 shrink-0">
+                  <div className="px-3 py-1.5 text-xs font-medium bg-background border border-b-background rounded-t-md -mb-px text-foreground">
+                    Query 1
+                  </div>
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                    Metrics
+                  </div>
+                </div>
+
+                {/* Terminal scrollback */}
+                <div className="flex-1 overflow-auto bg-[hsl(var(--background))] p-3 space-y-3 font-mono text-xs">
+                  {/* Command 1 */}
+                  <div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground select-none shrink-0">&gt;</span>
+                      <span className="text-foreground">
+                        SCAN 0 MATCH <span className="text-green-600 dark:text-green-400">user:*</span> COUNT 20
+                      </span>
+                    </div>
+                    <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
+                      <div>1) <span className="text-yellow-600 dark:text-yellow-400">&quot;14&quot;</span></div>
+                      <div>{'2) 1) '}<span className="text-green-600 dark:text-green-400">&quot;user:1001&quot;</span></div>
+                      <div>{'   2) '}<span className="text-green-600 dark:text-green-400">&quot;user:1002&quot;</span></div>
+                      <div>{'   3) '}<span className="text-green-600 dark:text-green-400">&quot;user:1003&quot;</span></div>
+                    </div>
+                  </div>
+
+                  {/* Command 2 */}
+                  <div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground select-none shrink-0">&gt;</span>
+                      <span className="text-foreground">
+                        HGETALL <span className="text-green-600 dark:text-green-400">user:1001</span>
+                      </span>
+                    </div>
+                    <div className="mt-1 ml-4 text-muted-foreground leading-relaxed">
+                      <div> 1) <span className="text-blue-500 dark:text-blue-400">&quot;name&quot;</span></div>
+                      <div> 2) <span className="text-yellow-600 dark:text-yellow-400">&quot;Alice Chen&quot;</span></div>
+                      <div> 3) <span className="text-blue-500 dark:text-blue-400">&quot;email&quot;</span></div>
+                      <div> 4) <span className="text-yellow-600 dark:text-yellow-400">&quot;alice@startup.io&quot;</span></div>
+                      <div> 5) <span className="text-blue-500 dark:text-blue-400">&quot;role&quot;</span></div>
+                      <div> 6) <span className="text-yellow-600 dark:text-yellow-400">&quot;admin&quot;</span></div>
+                      <div> 7) <span className="text-blue-500 dark:text-blue-400">&quot;last_login&quot;</span></div>
+                      <div> 8) <span className="text-yellow-600 dark:text-yellow-400">&quot;1710864000&quot;</span></div>
+                    </div>
+                  </div>
+
+                  {/* Command 3 */}
+                  <div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground select-none shrink-0">&gt;</span>
+                      <span className="text-foreground">
+                        TTL <span className="text-green-600 dark:text-green-400">user:1001</span>
+                      </span>
+                    </div>
+                    <div className="mt-1 ml-4 text-muted-foreground">
+                      (integer) <span className="text-yellow-600 dark:text-yellow-400">3487</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Command input */}
+                <div className="border-t bg-muted/10 shrink-0">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <span className="text-muted-foreground font-mono text-xs select-none shrink-0">&gt;</span>
+                    <div className="flex-1 rounded border bg-background px-3 py-1.5 text-xs font-mono text-muted-foreground">
+                      LRANGE queue:jobs 0 9
+                    </div>
+                    <button className="rounded bg-foreground text-background text-xs px-3 py-1.5 font-medium shrink-0">
+                      Run
+                    </button>
+                  </div>
+
+                  {/* History strip */}
+                  <div className="px-3 pb-2 flex items-center gap-2 overflow-x-auto">
+                    <span className="text-[10px] text-muted-foreground shrink-0">History:</span>
+                    {[
+                      "TTL user:1001",
+                      "HGETALL user:1001",
+                      "SCAN 0 MATCH user:* COUNT 20",
+                    ].map((cmd) => (
+                      <span
+                        key={cmd}
+                        className="text-[10px] font-mono text-muted-foreground bg-muted/40 border rounded px-1.5 py-0.5 whitespace-nowrap shrink-0"
+                      >
+                        {cmd}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Cards */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-2">
-          <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Managed Redis
-              </span>
+          {/* Right: Action cards (40%) */}
+          <div className="lg:w-[40%] flex flex-col justify-start gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                Get started
+              </p>
             </div>
-            <h2 className="text-base font-semibold mb-1">
-              Hosted Redis on Upstash
-            </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Create a hosted Redis database on Upstash - serverless,
-              pay-per-request. Includes key browser, query editor, live
-              monitor, and stream groups.
-            </p>
-            <Link
-              href="/account/managed"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-medium px-4 py-2 hover:bg-foreground/90 transition-colors"
-            >
-              Create Redis
-            </Link>
-          </div>
 
-          <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-blue-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Connect Your Own
-              </span>
+            <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Managed Redis
+                </span>
+              </div>
+              <h2 className="text-base font-semibold mb-1">
+                Hosted Redis on Upstash
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                Create a hosted Redis database on Upstash - serverless,
+                pay-per-request. Includes key browser, query editor, live
+                monitor, and stream groups.
+              </p>
+              <Link
+                href="/account/managed"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-medium px-4 py-2 hover:bg-foreground/90 transition-colors"
+              >
+                Create Redis
+              </Link>
             </div>
-            <h2 className="text-base font-semibold mb-1">Use a Tunnel</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Connect any Redis instance to the studio via a secure tunnel.
-              Works with local Docker containers, remote servers, or cloud
-              providers.
-            </p>
-            <Link
-              href="/guides/database-tunnel"
-              className="inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 hover:bg-muted/50 transition-colors"
-            >
-              Learn How
-            </Link>
+
+            <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Connect Your Own
+                </span>
+              </div>
+              <h2 className="text-base font-semibold mb-1">Use a Tunnel</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                Connect any Redis instance to the studio via a secure tunnel.
+                Works with local Docker containers, remote servers, or cloud
+                providers.
+              </p>
+              <Link
+                href="/guides/database-tunnel"
+                className="inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 hover:bg-muted/50 transition-colors"
+              >
+                Learn How
+              </Link>
+            </div>
           </div>
         </div>
 

@@ -34,119 +34,214 @@ export default function DatabaseStudioPage() {
         />
       ))}
       <ToolLayout slug="database-studio">
-        {/* Hero mockup */}
-        <div className="rounded-xl border bg-muted/20 overflow-hidden mb-8">
-          <div className="flex h-64 sm:h-80">
-            {/* Sidebar */}
-            <div className="w-44 border-r bg-muted/30 p-3 shrink-0 hidden sm:block">
-              <div className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
-                Schema
-              </div>
-              <div className="space-y-1">
-                {["users", "orders", "products", "sessions", "audit_log"].map(
-                  (table, i) => (
-                    <div
-                      key={table}
-                      className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${i === 0 ? "bg-primary/10 text-foreground font-medium" : "text-muted-foreground"}`}
-                    >
-                      <div className="h-1.5 w-1.5 rounded-full bg-current shrink-0" />
-                      {table}
-                    </div>
-                  )
-                )}
-              </div>
+        {/* Split hero */}
+        <div className="flex flex-col lg:flex-row gap-6 mb-10">
+          {/* Left: Studio mockup (60%) */}
+          <div className="lg:w-[60%] rounded-xl border bg-muted/10 overflow-hidden flex flex-col shrink-0">
+            {/* Window chrome */}
+            <div className="flex items-center gap-1.5 px-4 py-2.5 border-b bg-muted/20 shrink-0">
+              <div className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
+              <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/70" />
+              <div className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
+              <span className="ml-3 text-xs text-muted-foreground font-mono">
+                database-studio — postgresql://db.example.io:5432/prod
+              </span>
             </div>
 
-            {/* Main area */}
-            <div className="flex-1 flex flex-col min-w-0">
-              {/* Query bar */}
-              <div className="border-b px-4 py-2.5 bg-muted/10">
-                <div className="rounded border bg-background px-3 py-1.5 text-xs font-mono text-muted-foreground">
-                  SELECT id, email, created_at FROM users ORDER BY created_at
-                  DESC LIMIT 25;
-                </div>
-              </div>
-
-              {/* Results table */}
-              <div className="flex-1 overflow-auto p-3">
-                <div className="rounded border overflow-hidden text-xs">
-                  {/* Header */}
-                  <div className="grid grid-cols-3 bg-muted/50 font-medium text-muted-foreground border-b">
-                    <div className="px-3 py-2">id</div>
-                    <div className="px-3 py-2">email</div>
-                    <div className="px-3 py-2">created_at</div>
+            <div className="flex flex-1 min-h-0" style={{ height: "420px" }}>
+              {/* Sidebar */}
+              <div className="w-48 border-r bg-muted/20 flex flex-col shrink-0">
+                {/* Schema header */}
+                <div className="px-3 pt-3 pb-2 border-b">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Schemas
                   </div>
-                  {/* Rows */}
+                  <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+                    <svg className="h-3 w-3 text-muted-foreground" viewBox="0 0 16 16" fill="none">
+                      <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="font-mono">public</span>
+                  </div>
+                </div>
+
+                {/* Tables */}
+                <div className="flex-1 overflow-auto px-2 py-2 space-y-0.5">
                   {[
-                    ["1", "alice@example.com", "2024-01-15"],
-                    ["2", "bob@example.com", "2024-01-14"],
-                    ["3", "carol@example.com", "2024-01-13"],
-                    ["4", "dave@example.com", "2024-01-12"],
-                  ].map(([id, email, date]) => (
+                    { name: "users", rows: "12.4k", active: true },
+                    { name: "orders", rows: "38.1k", active: false },
+                    { name: "products", rows: "847", active: false },
+                    { name: "payments", rows: "29.6k", active: false },
+                    { name: "sessions", rows: "5.2k", active: false },
+                  ].map(({ name, rows, active }) => (
                     <div
-                      key={id}
-                      className="grid grid-cols-3 border-b last:border-0 hover:bg-muted/30 transition-colors"
+                      key={name}
+                      className={`flex items-center justify-between rounded px-2 py-1.5 text-xs ${active ? "bg-primary/10 text-foreground font-medium" : "text-muted-foreground hover:bg-muted/40"}`}
                     >
-                      <div className="px-3 py-2 font-mono text-muted-foreground">
-                        {id}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <svg className="h-3 w-3 shrink-0 opacity-60" viewBox="0 0 16 16" fill="none">
+                          <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                          <line x1="1" y1="7" x2="15" y2="7" stroke="currentColor" strokeWidth="1.2" />
+                        </svg>
+                        <span className="font-mono truncate">{name}</span>
                       </div>
-                      <div className="px-3 py-2 text-foreground">{email}</div>
-                      <div className="px-3 py-2 text-muted-foreground">
-                        {date}
-                      </div>
+                      <span className="text-[9px] bg-muted/60 rounded px-1 py-0.5 ml-1 shrink-0 tabular-nums">
+                        {rows}
+                      </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  4 rows returned in 3ms
-                </p>
+
+                {/* Column inspector */}
+                <div className="border-t px-2 py-2">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Columns
+                  </div>
+                  {[
+                    { col: "id", type: "int4" },
+                    { col: "email", type: "varchar" },
+                    { col: "role", type: "varchar" },
+                    { col: "created_at", type: "timestamptz" },
+                  ].map(({ col, type }) => (
+                    <div key={col} className="flex items-center justify-between text-[10px] py-0.5 text-muted-foreground">
+                      <span className="font-mono">{col}</span>
+                      <span className="text-[9px] text-muted-foreground/60">{type}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Main area */}
+              <div className="flex-1 flex flex-col min-w-0">
+                {/* Tab bar */}
+                <div className="flex items-end border-b bg-muted/10 px-3 pt-2 gap-1 shrink-0">
+                  <div className="px-3 py-1.5 text-xs font-medium bg-background border border-b-background rounded-t-md -mb-px text-foreground">
+                    users
+                  </div>
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                    SQL Query
+                  </div>
+                </div>
+
+                {/* Data grid */}
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-muted/30 border-b sticky top-0">
+                        {["id", "email", "name", "role", "created_at"].map((col) => (
+                          <th key={col} className="px-3 py-2 text-left font-medium text-muted-foreground font-mono whitespace-nowrap border-r last:border-r-0">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ["1", "alice@acme.dev", "Alice Chen", "admin", "2025-11-03 09:14:22"],
+                        ["2", "bob@startup.io", "Bob Markov", "user", "2025-11-02 16:47:05"],
+                        ["3", "carol.w@corp.com", "Carol Wu", "user", "2025-11-01 11:30:18"],
+                        ["4", "dave@example.org", "Dave Santos", "editor", "2025-10-31 08:22:44"],
+                        ["5", "eve@acme.dev", "Eve Nakamura", "admin", "2025-10-30 14:55:09"],
+                        ["6", "frank@startup.io", "Frank Kim", "user", "2025-10-29 17:03:31"],
+                        ["7", "grace@corp.com", "Grace Osei", "editor", "2025-10-28 10:19:57"],
+                      ].map(([id, email, name, role, ts]) => (
+                        <tr key={id} className="border-b hover:bg-muted/20 transition-colors">
+                          <td className="px-3 py-1.5 font-mono text-muted-foreground border-r whitespace-nowrap">{id}</td>
+                          <td className="px-3 py-1.5 text-foreground border-r whitespace-nowrap">{email}</td>
+                          <td className="px-3 py-1.5 text-foreground border-r whitespace-nowrap">{name}</td>
+                          <td className="px-3 py-1.5 border-r whitespace-nowrap">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${role === "admin" ? "bg-purple-500/15 text-purple-500" : role === "editor" ? "bg-blue-500/15 text-blue-500" : "bg-muted/60 text-muted-foreground"}`}>
+                              {role}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{ts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* SQL editor strip */}
+                <div className="border-t bg-muted/10 shrink-0">
+                  <div className="px-3 pt-2 pb-1">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                      Query
+                    </div>
+                    <div className="rounded border bg-background px-3 py-2 font-mono text-[11px] text-muted-foreground leading-relaxed">
+                      <span className="text-blue-500 dark:text-blue-400">SELECT</span>
+                      {" * "}
+                      <span className="text-blue-500 dark:text-blue-400">FROM</span>
+                      {" users "}
+                      <span className="text-blue-500 dark:text-blue-400">WHERE</span>
+                      {" role = "}
+                      <span className="text-green-600 dark:text-green-400">&apos;admin&apos;</span>
+                      {" "}
+                      <span className="text-blue-500 dark:text-blue-400">ORDER BY</span>
+                      {" created_at "}
+                      <span className="text-blue-500 dark:text-blue-400">DESC</span>
+                      {" "}
+                      <span className="text-blue-500 dark:text-blue-400">LIMIT</span>
+                      {" 50;"}
+                    </div>
+                  </div>
+                  {/* Status bar */}
+                  <div className="flex items-center justify-between px-3 py-1.5 border-t bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground font-mono">7 rows</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">4 ms</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Cards */}
-        <div className="grid sm:grid-cols-2 gap-4 mb-2">
-          <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Managed Database
-              </span>
+          {/* Right: Action cards (40%) */}
+          <div className="lg:w-[40%] flex flex-col justify-start gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                Get started
+              </p>
             </div>
-            <h2 className="text-base font-semibold mb-1">
-              Hosted PostgreSQL on Neon
-            </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Create a hosted PostgreSQL database on Neon - ready in seconds.
-              Includes the full studio, AI assistant, and cloud sync.
-            </p>
-            <Link
-              href="/account/managed"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-medium px-4 py-2 hover:bg-foreground/90 transition-colors"
-            >
-              Create Database
-            </Link>
-          </div>
 
-          <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-blue-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Connect Your Own
-              </span>
+            <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Managed Database
+                </span>
+              </div>
+              <h2 className="text-base font-semibold mb-1">
+                Hosted PostgreSQL on Neon
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                Create a hosted PostgreSQL database on Neon - ready in seconds.
+                Includes the full studio, AI assistant, and cloud sync.
+              </p>
+              <Link
+                href="/account/managed"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-foreground text-background text-xs font-medium px-4 py-2 hover:bg-foreground/90 transition-colors"
+              >
+                Create Database
+              </Link>
             </div>
-            <h2 className="text-base font-semibold mb-1">Use a Tunnel</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Connect any PostgreSQL database to the studio via a secure tunnel
-              from your local environment. Your data stays on your machine.
-            </p>
-            <Link
-              href="/guides/database-tunnel"
-              className="inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 hover:bg-muted/50 transition-colors"
-            >
-              Learn How
-            </Link>
+
+            <div className="rounded-xl border bg-card p-5 hover:border-foreground/20 transition-colors">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Connect Your Own
+                </span>
+              </div>
+              <h2 className="text-base font-semibold mb-1">Use a Tunnel</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+                Connect any PostgreSQL database to the studio via a secure tunnel
+                from your local environment. Your data stays on your machine.
+              </p>
+              <Link
+                href="/guides/database-tunnel"
+                className="inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 hover:bg-muted/50 transition-colors"
+              >
+                Learn How
+              </Link>
+            </div>
           </div>
         </div>
 
