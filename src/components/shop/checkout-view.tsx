@@ -8,7 +8,7 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { medusa, formatPrice } from "@/lib/shop/client";
 import { getCartId, clearCartId } from "@/lib/shop/cart";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, ShoppingBag, Lock, CheckCircle2, User } from "lucide-react";
+import { ArrowLeft, Loader2, ShoppingBag, Lock, CheckCircle2, User, Tag, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/auth-client";
 
@@ -35,10 +35,12 @@ interface Cart {
   subtotal: number;
   shipping_total: number;
   tax_total: number;
+  discount_total: number;
   currency_code: string;
   email: string | null;
   shipping_address: Address | null;
   billing_address: Address | null;
+  promotions?: { id: string; code?: string }[];
   payment_collection: {
     id: string;
     payment_sessions: { id: string; provider_id: string; data: Record<string, unknown>; status: string }[];
@@ -161,6 +163,48 @@ export function CheckoutView() {
   const [postalCode, setPostalCode] = useState("");
   const [countryCode, setCountryCode] = useState("de");
   const [phone, setPhone] = useState("");
+
+  // Promo code
+  const [promoCode, setPromoCode] = useState("");
+  const [promoApplying, setPromoApplying] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  const applyPromoCode = useCallback(async () => {
+    if (!cart || !promoCode.trim()) return;
+    setPromoApplying(true);
+    setPromoError(null);
+    try {
+      const res = await medusa.client.fetch<{ cart: Cart }>(
+        `/store/carts/${cart.id}/promotions`,
+        {
+          method: "POST",
+          body: { promo_codes: [promoCode.trim()] },
+        }
+      );
+      setCart(res.cart);
+      setPromoCode("");
+    } catch (err) {
+      setPromoError(err instanceof Error ? err.message : "Invalid promo code");
+    } finally {
+      setPromoApplying(false);
+    }
+  }, [cart, promoCode]);
+
+  const removePromoCode = useCallback(async (code: string) => {
+    if (!cart) return;
+    try {
+      const res = await medusa.client.fetch<{ cart: Cart }>(
+        `/store/carts/${cart.id}/promotions`,
+        {
+          method: "DELETE",
+          body: { promo_codes: [code] },
+        }
+      );
+      setCart(res.cart);
+    } catch {
+      // silently fail
+    }
+  }, [cart]);
 
   const fetchCart = useCallback(async () => {
     const cartId = getCartId();
@@ -719,6 +763,54 @@ export function CheckoutView() {
             ))}
           </div>
 
+          {/* Promo code */}
+          <div className="mb-3">
+            <div className="flex gap-1.5">
+              <div className="relative flex-1">
+                <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => { setPromoCode(e.target.value); setPromoError(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyPromoCode(); } }}
+                  placeholder="Discount code"
+                  className="w-full h-8 pl-8 pr-3 rounded-md border bg-background text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs px-3 shrink-0"
+                disabled={!promoCode.trim() || promoApplying}
+                onClick={() => void applyPromoCode()}
+              >
+                {promoApplying ? <Loader2 className="h-3 w-3 animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+            {promoError && (
+              <p className="text-[11px] text-destructive mt-1">{promoError}</p>
+            )}
+            {cart.promotions && cart.promotions.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {cart.promotions.map((promo) => (
+                  <span
+                    key={promo.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-600 dark:text-green-400"
+                  >
+                    <Tag className="h-2.5 w-2.5" />
+                    {promo.code}
+                    <button
+                      onClick={() => void removePromoCode(promo.code!)}
+                      className="ml-0.5 hover:text-green-800 dark:hover:text-green-200 transition-colors"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="h-px bg-border mb-3" />
 
           <div className="space-y-1.5 text-sm">
@@ -726,6 +818,12 @@ export function CheckoutView() {
               <span className="text-muted-foreground">Subtotal</span>
               <span>{formatPrice(cart.subtotal, cart.currency_code)}</span>
             </div>
+            {cart.discount_total > 0 && (
+              <div className="flex justify-between text-green-600 dark:text-green-400">
+                <span>Discount</span>
+                <span>-{formatPrice(cart.discount_total, cart.currency_code)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Shipping</span>
               <span>{cart.shipping_total ? formatPrice(cart.shipping_total, cart.currency_code) : "Free"}</span>
