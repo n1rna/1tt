@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/n1rna/1tt/api/internal/agent"
+	"github.com/n1rna/1tt/api/internal/ai"
 	"github.com/n1rna/1tt/api/internal/billing"
 	"github.com/n1rna/1tt/api/internal/config"
 	"github.com/n1rna/1tt/api/internal/crawl"
@@ -49,10 +49,19 @@ func main() {
 		log.Printf("WARNING: R2 not configured (file upload/download will be unavailable)")
 	}
 
+	// Cloudflare client for R2 bucket and token management.
+	var cfStorageClient *storage.CloudflareClient
+	if cfg.CfAccountID != "" && cfg.CfAPIToken != "" {
+		cfStorageClient = storage.NewCloudflareClient(cfg.CfAccountID, cfg.CfAPIToken)
+		log.Printf("INFO: Cloudflare storage client initialised (account: %s)", cfg.CfAccountID)
+	} else {
+		log.Printf("WARNING: Cloudflare client not configured (missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN — storage bucket provisioning will be unavailable)")
+	}
+
 	var llmsSvc *llms.Service
 	if cfg.CfAccountID != "" && cfg.LLMAPIKey != "" && db != nil && r2 != nil {
 		crawlClient := crawl.NewClient(cfg.CfAccountID, cfg.CfAPIToken)
-		llmsSvc = llms.NewService(db, r2, crawlClient, agent.LLMConfig{
+		llmsSvc = llms.NewService(db, r2, crawlClient, ai.LLMConfig{
 			Provider: cfg.LLMProvider,
 			APIKey:   cfg.LLMAPIKey,
 			BaseURL:  cfg.LLMBaseURL,
@@ -239,14 +248,15 @@ func main() {
 				r.Get("/redis/{id}/info", handler.GetRedisInfo(db, upstashClient))
 			}
 			// Object storage — S3-compatible buckets backed by Cloudflare R2.
-			if db != nil && r2 != nil {
-				r.Post("/storage/buckets", handler.CreateStorageBucket(db, r2, billingClient))
+			if db != nil && cfStorageClient != nil {
+				r.Post("/storage/buckets", handler.CreateStorageBucket(db, r2, cfStorageClient, billingClient))
 				r.Get("/storage/buckets", handler.ListStorageBuckets(db))
-				r.Delete("/storage/buckets/{id}", handler.DeleteStorageBucket(db, r2))
+				r.Delete("/storage/buckets/{id}", handler.DeleteStorageBucket(db, cfg.R2AccountID, cfStorageClient))
+				r.Get("/storage/buckets/{id}/credentials", handler.GetStorageBucketCredentials(db, cfStorageClient))
 				r.Get("/storage/buckets/{id}/objects", handler.ListStorageObjects(db))
-				r.Post("/storage/buckets/{id}/objects", handler.UploadStorageObject(db, r2, billingClient))
-				r.Delete("/storage/buckets/{id}/objects/{objectId}", handler.DeleteStorageObject(db, r2))
-				r.Get("/storage/buckets/{id}/objects/{objectId}/url", handler.GetStorageObjectUrl(db, r2))
+				r.Post("/storage/buckets/{id}/objects", handler.UploadStorageObject(db, cfg.R2AccountID, billingClient))
+				r.Delete("/storage/buckets/{id}/objects/{objectId}", handler.DeleteStorageObject(db, cfg.R2AccountID))
+				r.Get("/storage/buckets/{id}/objects/{objectId}/url", handler.GetStorageObjectUrl(db, cfg.R2AccountID))
 				r.Get("/storage/usage", handler.GetStorageUsage(db, billingClient))
 			}
 			// AI query generation (SQL, Elasticsearch, etc.)

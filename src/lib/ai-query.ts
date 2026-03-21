@@ -18,15 +18,28 @@ export interface AiChatResponse {
   error?: string;
 }
 
+/**
+ * Send a chat request to the AI query agent.
+ * The backend owns the system prompt - we only send user/assistant messages,
+ * the schema, and the dialect. The backend builds the full prompt chain.
+ */
 export async function generateAiChat(
   messages: AiMessage[],
-  dialect: SqlDialect
+  dialect: SqlDialect,
+  schema?: TableSchema[]
 ): Promise<AiChatResponse> {
+  // Strip any system messages - the backend builds its own
+  const filteredMessages = messages.filter((m) => m.role !== "system");
+
   const res = await fetch("/api/proxy/ai/query", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, dialect }),
+    body: JSON.stringify({
+      messages: filteredMessages,
+      dialect,
+      schema: schema ?? [],
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -35,79 +48,10 @@ export async function generateAiChat(
   return res.json() as Promise<AiChatResponse>;
 }
 
-export function buildSystemMessage(schema: TableSchema[], dialect: SqlDialect): string {
-  if (dialect === "redis") {
-    return `You are a Redis command expert.
-
-Your task: generate Redis commands for the user's request.
-
-CRITICAL RULES:
-- Output ONLY the raw Redis command(s). Nothing else inside the code block.
-- First write a brief reasoning (1-2 sentences) explaining your approach
-- Then output the command in a fenced code block: \`\`\`redis ... \`\`\`
-- One command per line if multiple commands are needed
-- Use standard Redis command syntax (e.g. SET key value, GET key, SCAN 0 MATCH pattern COUNT 100)
-- For key pattern searches, use SCAN with MATCH, never KEYS (to avoid blocking)
-- Common commands: GET, SET, DEL, SCAN, HGETALL, HSET, LPUSH, LRANGE, SADD, SMEMBERS, ZADD, ZRANGEBYSCORE, XRANGE, INFO, TTL, EXPIRE, PERSIST, TYPE
-- For follow-up requests, use conversation context to understand what the user wants modified`;
-  }
-
-  if (dialect === "elasticsearch") {
-    const indexName = schema[0]?.name ?? "*";
-    const fields = schema.flatMap(t =>
-      t.columns.map(c => `  ${c.name}${c.type ? ` — ${c.type}` : ""}`)
-    );
-    const fieldList = fields.length > 0 ? fields.join("\n") : "  (no fields known)";
-
-    return `You are an Elasticsearch query expert.
-
-Your task: generate the JSON request body for the Elasticsearch _search API.
-
-Index: ${indexName}
-Index mappings (field — type):
-${fieldList}
-
-CRITICAL RULES:
-- Output ONLY the raw JSON object. Nothing else.
-- Do NOT include the HTTP method or URL path (no "GET /index/_search" prefix)
-- Do NOT include any comments — JSON does not support comments
-- The output must be valid, parseable JSON that starts with { and ends with }
-- Use exact field names from the mappings above
-- Include "size": 10 unless the user specifies otherwise
-- Use "match" for text search, "term" for exact keyword match, "range" for dates/numbers, "bool" for combining conditions
-- For aggregations, set "size": 0 to skip hits
-- For follow-up requests, use conversation context to understand what the user wants modified`;
-  }
-
-  const schemaText = schema.map(t => {
-    const cols = t.columns.map(c => {
-      let col = `  ${c.name} ${c.type}`;
-      if (c.isPrimary) col += " PRIMARY KEY";
-      if (c.foreignKey) col += ` → ${c.foreignKey.table}(${c.foreignKey.column})`;
-      return col;
-    }).join("\n");
-    return `Table "${t.schema}"."${t.name}":\n${cols}`;
-  }).join("\n\n");
-
-  return `You are a SQL expert for ${dialect === "postgres" ? "PostgreSQL" : "SQLite"} databases.
-
-Database schema:
-${schemaText}
-
-Rules:
-- First write a brief reasoning (1-2 sentences) explaining your approach
-- Then output the SQL in a fenced code block: \`\`\`sql ... \`\`\`
-- Use ${dialect === "postgres" ? "PostgreSQL" : "SQLite"} syntax
-- Use exact table and column names from the schema
-- Include LIMIT 100 for SELECT queries unless specified otherwise
-- For follow-up requests, use conversation context to understand what the user wants modified`;
-}
-
 export async function getAiSuggestions(
   schema: TableSchema[],
   dialect: SqlDialect
 ): Promise<QuerySuggestion[]> {
-  // For ES/Redis, the backend expects {fields, dialect} instead of {schema, dialect}
   const body =
     dialect === "elasticsearch" || dialect === "redis"
       ? { fields: schema.flatMap((t) => t.columns.map((c) => c.name)), dialect }

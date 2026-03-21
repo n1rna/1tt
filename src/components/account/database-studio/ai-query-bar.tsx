@@ -6,7 +6,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
   generateAiChat,
-  buildSystemMessage,
   getAiSuggestions,
 } from "@/lib/ai-query";
 import type { QuerySuggestion } from "@/lib/ai-query";
@@ -290,14 +289,10 @@ export function AiQueryBar({
     // Build session snapshot to work with
     let current = aiSession ?? emptySession();
 
-    // Build messages array
-    const messages = [...current.messages];
-
-    // Inject schema as system message once
+    // Build messages array (no system messages - backend owns them)
+    const messages = [...current.messages].filter((m) => m.role !== "system");
     if (!current.schemaInjected && schema.length > 0) {
-      const sysMsg = { role: "system" as const, content: buildSystemMessage(schema, dialect) };
-      messages.unshift(sysMsg);
-      current = { ...current, messages, schemaInjected: true };
+      current = { ...current, schemaInjected: true };
     }
 
     // Invisible context: editor content
@@ -334,7 +329,7 @@ export function AiQueryBar({
     onAiSessionChange?.(sessionWithEntry);
 
     // Call API
-    const result = await generateAiChat(messages, dialect);
+    const result = await generateAiChat(messages, dialect, schema);
 
     if (result.error) {
       onAiSessionChange?.({

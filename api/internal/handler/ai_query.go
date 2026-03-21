@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 
+	"github.com/n1rna/1tt/api/internal/ai"
 	"github.com/n1rna/1tt/api/internal/billing"
 	"github.com/n1rna/1tt/api/internal/config"
 	"github.com/n1rna/1tt/api/internal/middleware"
@@ -30,18 +29,20 @@ type aiQueryForeignKey struct {
 }
 
 type aiQueryTable struct {
-	Schema      string            `json:"schema"`
-	Name        string            `json:"name"`
-	Columns     []aiQueryColumn     `json:"columns"`
+	Schema      string             `json:"schema"`
+	Name        string             `json:"name"`
+	Columns     []aiQueryColumn    `json:"columns"`
 	ForeignKeys []aiQueryForeignKey `json:"foreignKeys"`
 }
 
 type aiQueryRequest struct {
 	// Legacy single-turn fields.
-	Prompt string       `json:"prompt"`
+	Prompt string         `json:"prompt"`
 	Schema []aiQueryTable `json:"schema"`
 
 	// Conversation mode: if non-nil, Messages takes precedence.
+	// System messages from the frontend are stripped and replaced by the
+	// backend-generated prompt.
 	Messages []chatMessage `json:"messages"`
 
 	Dialect string `json:"dialect"`
@@ -62,303 +63,63 @@ type aiQuerySuggestion struct {
 
 type aiQuerySuggestionsRequest struct {
 	Schema  []aiQueryTable `json:"schema"`
-	Dialect string       `json:"dialect"`
+	Dialect string         `json:"dialect"`
 }
 
 type aiQuerySuggestionsResponse struct {
 	Suggestions []aiQuerySuggestion `json:"suggestions"`
 }
 
-// --- OpenAI-compatible chat completion wire types ---
-
+// chatMessage is a single turn in a conversation from the frontend.
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type chatCompletionRequest struct {
-	Model     string        `json:"model"`
-	Messages  []chatMessage `json:"messages"`
-	Temp      float64       `json:"temperature"`
-	MaxTokens int           `json:"max_tokens"`
+// --- Schema converter ---
+
+// toSchemaTable converts a handler aiQueryTable to ai.SchemaTable.
+func toSchemaTable(t aiQueryTable) ai.SchemaTable {
+	cols := make([]ai.SchemaColumn, len(t.Columns))
+	for i, c := range t.Columns {
+		cols[i] = ai.SchemaColumn{Name: c.Name, Type: c.Type, IsPrimary: c.IsPrimary}
+	}
+	fks := make([]ai.SchemaForeignKey, len(t.ForeignKeys))
+	for i, fk := range t.ForeignKeys {
+		fks[i] = ai.SchemaForeignKey{Column: fk.Column, RefTable: fk.RefTable, RefColumn: fk.RefColumn}
+	}
+	return ai.SchemaTable{Schema: t.Schema, Name: t.Name, Columns: cols, ForeignKeys: fks}
 }
 
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message chatMessage `json:"message"`
-	} `json:"choices"`
-	Usage struct {
-		TotalTokens int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// --- Schema formatter ---
-
-// formatSchema converts the schema array into a compact text block for the system prompt.
-func formatSchema(tables []aiQueryTable) string {
-	var sb strings.Builder
-	for i, t := range tables {
-		if i > 0 {
-			sb.WriteString("\n")
-		}
-		if t.Schema != "" && t.Schema != "public" {
-			fmt.Fprintf(&sb, "Table \"%s\".\"%s\":\n", t.Schema, t.Name)
-		} else {
-			fmt.Fprintf(&sb, "Table \"%s\":\n", t.Name)
-		}
-
-		// Build a lookup of FK target by column name for inline annotation.
-		fkByCol := make(map[string]aiQueryForeignKey, len(t.ForeignKeys))
-		for _, fk := range t.ForeignKeys {
-			fkByCol[fk.Column] = fk
-		}
-
-		for _, col := range t.Columns {
-			typePart := strings.ToUpper(col.Type)
-			var extras []string
-			if col.IsPrimary {
-				extras = append(extras, "PRIMARY KEY")
-			}
-			if fk, ok := fkByCol[col.Name]; ok {
-				extras = append(extras, fmt.Sprintf("→ %s(%s)", fk.RefTable, fk.RefColumn))
-			}
-			if len(extras) > 0 {
-				fmt.Fprintf(&sb, "  %s %s %s\n", col.Name, typePart, strings.Join(extras, " "))
-			} else {
-				fmt.Fprintf(&sb, "  %s %s\n", col.Name, typePart)
-			}
-		}
+// agentTypeForDialect maps a dialect string to the corresponding AgentType.
+func agentTypeForDialect(dialect string) ai.AgentType {
+	switch dialect {
+	case "sqlite":
+		return ai.AgentQuerySQLite
+	case "redis":
+		return ai.AgentQueryRedis
+	case "elasticsearch":
+		return ai.AgentQueryElasticsearch
+	default:
+		return ai.AgentQueryPostgres
 	}
-	return sb.String()
-}
-
-// buildSystemPrompt constructs the query-generation system prompt based on dialect.
-// For the "elasticsearch" dialect the tables parameter is unused; the caller
-// is expected to supply index mappings via the conversation messages instead.
-func buildSystemPrompt(dialect string, tables []aiQueryTable) string {
-	if dialect == "" {
-		dialect = "postgres"
-	}
-
-	if dialect == "redis" {
-		return `You are a Redis command expert.
-
-Your task: generate Redis commands for the user's request.
-
-CRITICAL RULES:
-- Output ONLY the raw Redis command(s). Nothing else.
-- One command per line if multiple commands are needed
-- Use standard Redis command syntax (e.g. SET key value, GET key, SCAN 0 MATCH pattern COUNT 100)
-- For key pattern searches, use SCAN with MATCH, never KEYS
-- Common commands: GET, SET, DEL, SCAN, HGETALL, HSET, LPUSH, LRANGE, SADD, SMEMBERS, ZADD, ZRANGEBYSCORE, XRANGE, INFO, TTL, EXPIRE, PERSIST, TYPE
-- Do NOT include markdown formatting or code fences`
-	}
-
-	if dialect == "elasticsearch" {
-		return `You are an Elasticsearch query expert.
-
-Your task: generate the JSON request body for the Elasticsearch _search API.
-
-CRITICAL RULES:
-- Output ONLY the raw JSON object. Nothing else.
-- Do NOT include the HTTP method or URL path (no "GET /index/_search" prefix)
-- Do NOT include any comments — JSON does not support comments
-- Do NOT include any text before or after the JSON
-- The output must be valid, parseable JSON that starts with { and ends with }
-- Include "size": 10 unless the user specifies otherwise
-- Use appropriate query types: "match" for text search, "term" for exact keyword match, "range" for dates/numbers, "bool" for combining conditions
-- For aggregations, set "size": 0 to skip hits
-
-Example of correct output:
-{"query":{"match_all":{}},"size":10}`
-	}
-
-	schemaTxt := formatSchema(tables)
-	return fmt.Sprintf(`You are a SQL expert for %s databases. Generate a single SQL query based on the user's request.
-
-Database schema:
-%s
-Rules:
-- Output ONLY the raw SQL query, nothing else
-- No markdown formatting, no code fences, no explanations
-- Use %s syntax (PostgreSQL or SQLite)
-- Use exact table and column names from the schema
-- Include LIMIT 100 for SELECT queries unless the user specifies otherwise
-- Make reasonable assumptions for ambiguous requests`, dialect, schemaTxt, dialect)
-}
-
-// conversationSystemSuffix returns the suffix appended to the frontend-provided
-// system message in conversation mode, instructing the LLM to emit reasoning
-// followed by a fenced code block.
-func conversationSystemSuffix(dialect string) string {
-	if dialect == "redis" {
-		return "\n\nBriefly explain your approach in 1-2 sentences, then output the Redis command(s) in a fenced code block: ```redis ... ```. One command per line. No text inside the code block."
-	}
-	if dialect == "elasticsearch" {
-		return "\n\nBriefly explain your approach in 1-2 sentences, then output the JSON in a fenced code block: ```json ... ```. CRITICAL: The JSON must be a raw JSON object starting with { — no HTTP method/path prefix, no comments, no text inside the JSON block."
-	}
-	return "\n\nAfter your reasoning, output the SQL on a new line starting with ```sql and ending with ```. Your reasoning should be brief (1-2 sentences max)."
-}
-
-// stripMarkdownFences removes optional ```sql ... ```, ```json ... ```, or
-// plain ``` ... ``` fences from LLM output.
-func stripMarkdownFences(s string) string {
-	s = strings.TrimSpace(s)
-	// Remove opening fence: ```sql, ```json, or ```
-	if strings.HasPrefix(s, "```") {
-		// Drop the first line (the fence line)
-		idx := strings.Index(s, "\n")
-		if idx == -1 {
-			return ""
-		}
-		s = s[idx+1:]
-	}
-	// Remove closing fence
-	if strings.HasSuffix(s, "```") {
-		idx := strings.LastIndex(s, "```")
-		s = s[:idx]
-	}
-	return strings.TrimSpace(s)
-}
-
-// parseAiResponse splits an LLM response that may contain a fenced code block
-// (```sql, ```json, or plain ```) into a (reasoning, query) pair.
-//
-//   - If a fenced block is present: everything before it is the reasoning, the
-//     content inside the fence is the query output.
-//   - If no fence is present: the entire content is treated as the query output.
-func parseAiResponse(content string) (reasoning, queryOut string) {
-	// Recognise both ```sql and ```json opening fences.
-	openFences := []string{"```sql", "```json", "```"}
-	const closeFence = "```"
-
-	start := -1
-	openLen := 0
-	for _, fence := range openFences {
-		idx := strings.Index(content, fence)
-		if idx == -1 {
-			continue
-		}
-		// For the plain ``` fence make sure it is not the closing fence of an
-		// already-matched opening fence (i.e. only use it when none of the
-		// language-tagged fences matched).
-		if fence == "```" && start != -1 {
-			break
-		}
-		start = idx
-		openLen = len(fence)
-		break
-	}
-
-	if start == -1 {
-		// No fence — treat the whole response as raw content.
-		return "", stripMarkdownFences(content)
-	}
-
-	reasoning = strings.TrimSpace(content[:start])
-
-	// Advance past the opening fence line.
-	afterOpen := content[start+openLen:]
-	// Skip the newline immediately following the fence marker.
-	if len(afterOpen) > 0 && afterOpen[0] == '\n' {
-		afterOpen = afterOpen[1:]
-	}
-
-	end := strings.Index(afterOpen, closeFence)
-	if end == -1 {
-		// Closing fence missing — use everything after the open fence.
-		queryOut = strings.TrimSpace(afterOpen)
-		return reasoning, queryOut
-	}
-
-	queryOut = strings.TrimSpace(afterOpen[:end])
-	return reasoning, queryOut
-}
-
-// callChatCompletionMessages sends a chat completion request to the configured
-// OpenAI-compatible endpoint using the provided messages slice directly.
-// It returns the assistant message content and total token count.
-func callChatCompletionMessages(cfg *config.Config, messages []chatMessage) (string, int, error) {
-	baseURL := cfg.LLMBaseURL
-	if baseURL == "" {
-		baseURL = "https://api.moonshot.ai/v1"
-	}
-	endpoint := strings.TrimRight(baseURL, "/") + "/chat/completions"
-
-	model := cfg.LLMModel
-	if model == "" {
-		model = "kimi-k2-0711-preview"
-	}
-
-	payload := chatCompletionRequest{
-		Model:     model,
-		Messages:  messages,
-		Temp:      0.1,
-		MaxTokens: 2000,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", 0, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return "", 0, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", 0, fmt.Errorf("llm request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("llm returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var completion chatCompletionResponse
-	if err := json.Unmarshal(respBody, &completion); err != nil {
-		return "", 0, fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	if len(completion.Choices) == 0 {
-		return "", 0, fmt.Errorf("llm returned no choices")
-	}
-
-	content := strings.TrimSpace(completion.Choices[0].Message.Content)
-	return content, completion.Usage.TotalTokens, nil
-}
-
-// callChatCompletion is a convenience wrapper around callChatCompletionMessages
-// that builds a two-message (system + user) conversation from discrete prompts.
-func callChatCompletion(cfg *config.Config, systemPrompt, userPrompt string) (string, int, error) {
-	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userPrompt},
-	}
-	return callChatCompletionMessages(cfg, messages)
 }
 
 // --- Handlers ---
 
-// GenerateAiQuery handles POST /ai/sql — generates SQL or Elasticsearch queries via LLM.
-// Auth required. Pro/Max plan required. Calls the LLM and returns a SQL query.
+// GenerateAiQuery handles POST /ai/query — generates SQL, Redis, or Elasticsearch
+// queries via LLM.
+// Auth required. Pro/Max plan required.
 //
 // Accepts two request formats:
 //
 //  1. Legacy single-turn: {"prompt":"...","schema":[...],"dialect":"postgres"}
-//  2. Conversation:       {"messages":[{"role":"...","content":"..."},...], "dialect":"postgres"}
+//  2. Conversation:       {"messages":[{"role":"user","content":"..."},...], "dialect":"postgres", "schema":[...]}
 //
-// When "messages" is present (non-nil), conversation mode is used and the
-// frontend-supplied system message is augmented with reasoning/fence instructions.
+// In conversation mode, any system messages from the frontend are stripped and
+// the backend builds its own system prompt from the schema. This ensures
+// consistency and prevents prompt injection via the messages array.
+//
 // Both modes return {"sql":"...","reasoning":"...","tokensUsed":N}.
 func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -382,60 +143,95 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		var (
-			rawContent string
-			tokens     int
-			llmErr     error
-		)
-
 		log.Printf("ai_query: request — prompt=%q messages_len=%d dialect=%q", req.Prompt, len(req.Messages), req.Dialect)
 
-		if req.Messages != nil && len(req.Messages) > 0 {
-			// --- Conversation mode ---
-			// The frontend provides the full messages array including a system
-			// message that already contains the schema. Append the
-			// reasoning+fence instruction to the first system message so the
-			// LLM knows how to format its response.
-			messages := make([]chatMessage, len(req.Messages))
-			copy(messages, req.Messages)
+		if req.Dialect == "" {
+			req.Dialect = "postgres"
+		}
 
-			suffix := conversationSystemSuffix(req.Dialect)
-			for i, msg := range messages {
-				if msg.Role == "system" {
-					messages[i].Content = msg.Content + suffix
-					break
+		// Build schema context — used for SQL dialects; empty string for redis/ES
+		// (the prompt template ignores it for those dialects).
+		var schemaTables []ai.SchemaTable
+		for _, t := range req.Schema {
+			schemaTables = append(schemaTables, toSchemaTable(t))
+		}
+		schemaContext := ai.FormatSchemaContext(schemaTables)
+
+		// Build conversation history from the messages array, filtering out any
+		// system messages the frontend may have included.
+		var history []ai.Message
+		var userMessage string
+
+		if len(req.Messages) > 0 {
+			// Conversation mode: collect non-system turns into history;
+			// the last user message becomes the current turn.
+			var nonSystem []chatMessage
+			for _, m := range req.Messages {
+				if m.Role != "system" {
+					nonSystem = append(nonSystem, m)
 				}
 			}
 
-			if len(messages) == 0 {
-				http.Error(w, `{"error":"messages array must not be empty"}`, http.StatusBadRequest)
+			if len(nonSystem) == 0 {
+				http.Error(w, `{"error":"messages must contain at least one non-system message"}`, http.StatusBadRequest)
 				return
 			}
 
-			rawContent, tokens, llmErr = callChatCompletionMessages(cfg, messages)
+			// The last message must be from the user.
+			last := nonSystem[len(nonSystem)-1]
+			if last.Role != "user" {
+				http.Error(w, `{"error":"last message must be from the user"}`, http.StatusBadRequest)
+				return
+			}
+			userMessage = last.Content
+
+			// Everything before the last message is history.
+			for _, m := range nonSystem[:len(nonSystem)-1] {
+				role := m.Role
+				if role == "assistant" {
+					role = "assistant"
+				}
+				history = append(history, ai.Message{Role: role, Content: m.Content})
+			}
 		} else {
-			// --- Legacy single-turn mode ---
+			// Legacy single-turn mode.
 			if strings.TrimSpace(req.Prompt) == "" {
 				http.Error(w, `{"error":"prompt is required"}`, http.StatusBadRequest)
 				return
 			}
-
-			sysPrompt := buildSystemPrompt(req.Dialect, req.Schema)
-			rawContent, tokens, llmErr = callChatCompletion(cfg, sysPrompt, req.Prompt)
+			userMessage = req.Prompt
 		}
 
-		if llmErr != nil {
-			log.Printf("ai_query: llm error for user %s: %v", userID, llmErr)
-			http.Error(w, `{"error":"failed to generate SQL"}`, http.StatusInternalServerError)
+		llmCfg := &ai.LLMConfig{
+			Provider: cfg.LLMProvider,
+			APIKey:   cfg.LLMAPIKey,
+			BaseURL:  cfg.LLMBaseURL,
+			Model:    cfg.LLMModel,
+		}
+		if llmCfg.BaseURL == "" {
+			llmCfg.BaseURL = "https://api.moonshot.ai/v1"
+		}
+		if llmCfg.Model == "" {
+			llmCfg.Model = "kimi-k2-0711-preview"
+		}
+
+		agentResult, agentErr := ai.Run(r.Context(), llmCfg, ai.AgentConfig{
+			Type:        agentTypeForDialect(req.Dialect),
+			UserMessage: userMessage,
+			Context:     schemaContext,
+			History:     history,
+			ExtraData: map[string]any{
+				"dialect": req.Dialect,
+			},
+		})
+
+		if agentErr != nil {
+			log.Printf("ai_query: agent error for user %s: %v", userID, agentErr)
+			http.Error(w, `{"error":"failed to generate query"}`, http.StatusInternalServerError)
 			return
 		}
 
-		reasoning, cleanQuery := parseAiResponse(rawContent)
-
-		// For Elasticsearch: ensure the output is clean JSON without HTTP prefix or comments
-		if req.Dialect == "elasticsearch" {
-			cleanQuery = sanitizeEsJSON(cleanQuery)
-		}
+		tokens := agentResult.InputTokens + agentResult.OutputTokens
 
 		// Track actual token usage from the LLM response.
 		tokenCount := int64(tokens)
@@ -448,14 +244,14 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(aiQueryResponse{
-			SQL:        cleanQuery,
-			Reasoning:  reasoning,
+			SQL:        agentResult.Output,
+			Reasoning:  agentResult.Reasoning,
 			TokensUsed: tokens,
 		})
 	}
 }
 
-// GenerateAiQuerySuggestions handles POST /ai/sql/suggestions.
+// GenerateAiQuerySuggestions handles POST /ai/query/suggestions.
 // Auth required. Rule-based — no LLM call. Analyzes the schema and returns
 // up to 8 canned query suggestions.
 //
@@ -619,70 +415,6 @@ func buildSuggestions(tables []aiQueryTable, dialect string) []aiQuerySuggestion
 	return suggestions
 }
 
-// sanitizeEsJSON cleans up LLM-generated Elasticsearch JSON that may contain
-// unwanted prefixes (e.g. "GET /index/_search\n{...}"), inline comments
-// (// or /* */), or trailing text after the JSON object.
-func sanitizeEsJSON(s string) string {
-	s = strings.TrimSpace(s)
-
-	// Strip HTTP method + path prefix: "GET /users/_search\n" or "POST /_search\n"
-	if idx := strings.Index(s, "\n"); idx != -1 && idx < 80 {
-		line := strings.TrimSpace(s[:idx])
-		upper := strings.ToUpper(line)
-		if strings.HasPrefix(upper, "GET ") || strings.HasPrefix(upper, "POST ") ||
-			strings.HasPrefix(upper, "PUT ") || strings.HasPrefix(upper, "DELETE ") {
-			s = strings.TrimSpace(s[idx+1:])
-		}
-	}
-
-	// Find the first '{' — everything before it is discarded
-	braceIdx := strings.Index(s, "{")
-	if braceIdx == -1 {
-		return s // no JSON object found, return as-is
-	}
-	s = s[braceIdx:]
-
-	// Remove single-line comments (// ...) that some LLMs add despite instructions
-	lines := strings.Split(s, "\n")
-	var cleaned []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "//") {
-			continue // skip full-line comments
-		}
-		// Remove inline comments: find // that isn't inside a string
-		// Simple heuristic: if // appears after a " or }, it's likely a comment
-		if commentIdx := strings.Index(line, "//"); commentIdx > 0 {
-			before := strings.TrimSpace(line[:commentIdx])
-			if len(before) > 0 {
-				line = before
-			}
-		}
-		cleaned = append(cleaned, line)
-	}
-	s = strings.Join(cleaned, "\n")
-
-	// Find matching closing '}' by counting braces
-	depth := 0
-	endIdx := -1
-	for i, ch := range s {
-		if ch == '{' {
-			depth++
-		} else if ch == '}' {
-			depth--
-			if depth == 0 {
-				endIdx = i
-				break
-			}
-		}
-	}
-	if endIdx >= 0 {
-		s = s[:endIdx+1]
-	}
-
-	return strings.TrimSpace(s)
-}
-
 // ─── Elasticsearch suggestion helpers ────────────────────────────────────────
 
 // esFieldKind classifies a bare field name into a simple kind used to pick the
@@ -697,13 +429,11 @@ const (
 
 func classifyEsField(name string) esFieldKind {
 	n := strings.ToLower(name)
-	// Date / time heuristics
 	if strings.Contains(n, "date") || strings.Contains(n, "time") ||
 		strings.Contains(n, "created") || strings.Contains(n, "updated") ||
 		strings.Contains(n, "timestamp") || strings.Contains(n, "at") {
 		return esKindDate
 	}
-	// Numeric heuristics
 	if strings.Contains(n, "count") || strings.Contains(n, "total") ||
 		strings.Contains(n, "amount") || strings.Contains(n, "price") ||
 		strings.Contains(n, "size") || strings.Contains(n, "num") ||
@@ -714,7 +444,7 @@ func classifyEsField(name string) esFieldKind {
 }
 
 // buildEsSuggestions generates rule-based Elasticsearch query suggestions from
-// a list of field names.  It always starts with "Match all documents" and then
+// a list of field names. It always starts with "Match all documents" and then
 // adds up to 7 field-specific chips.
 func buildEsSuggestions(fields []string) []aiQuerySuggestion {
 	const max = 8
@@ -761,7 +491,6 @@ func buildEsSuggestions(fields []string) []aiQuerySuggestion {
 				fmt.Sprintf("Search %s", f),
 				fmt.Sprintf(`{"query":{"match":{"%s":{"query":"value"}}},"size":10}`, f),
 			)
-			// Add a terms aggregation for the first text/keyword field too.
 			if len(suggestions) < max {
 				add(
 					fmt.Sprintf("Top %s values", f),

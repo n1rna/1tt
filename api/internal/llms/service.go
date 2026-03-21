@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/n1rna/1tt/api/internal/agent"
+	"github.com/n1rna/1tt/api/internal/ai"
 	"github.com/n1rna/1tt/api/internal/billing"
 	"github.com/n1rna/1tt/api/internal/crawl"
 	"github.com/n1rna/1tt/api/internal/gitclone"
@@ -33,7 +33,7 @@ type Service struct {
 	db          *sql.DB
 	r2          *storage.R2Client
 	crawlClient *crawl.Client
-	llmCfg      agent.LLMConfig
+	llmCfg      ai.LLMConfig
 
 	// Worker pool coordination
 	sem        chan struct{}           // semaphore limiting concurrent workers
@@ -88,7 +88,7 @@ type CacheInfo struct {
 
 // NewService creates a new Service and starts the background worker loop.
 // Call Stop() to shut it down gracefully.
-func NewService(db *sql.DB, r2 *storage.R2Client, crawlClient *crawl.Client, llmCfg agent.LLMConfig) *Service {
+func NewService(db *sql.DB, r2 *storage.R2Client, crawlClient *crawl.Client, llmCfg ai.LLMConfig) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Service{
@@ -335,10 +335,19 @@ func (s *Service) runJob(ctx context.Context, jobID string) error {
 		return err
 	}
 
-	content, usage, err := agent.GenerateLlmsTxt(ctx, s.llmCfg, pages, detailLevel, sourceType)
+	result, err := ai.Run(ctx, &s.llmCfg, ai.AgentConfig{
+		Type: ai.AgentLlmsTxt,
+		ExtraData: map[string]any{
+			"pages":       pages,
+			"detailLevel": detailLevel,
+			"sourceType":  sourceType,
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("generate llms.txt: %w", err)
 	}
+	content := result.Output
+	usage := struct{ InputTokens, OutputTokens int }{result.InputTokens, result.OutputTokens}
 
 	// --- Upsert result cache ---
 	resultCacheID := generateID()
