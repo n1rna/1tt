@@ -44,7 +44,9 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useSyncedState } from "@/lib/sync";
-import { Globe, GlobeLock } from "lucide-react";
+import { Globe, GlobeLock, Wifi } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
+import { TunnelConnectDialog } from "@/components/account/tunnel-connect-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,11 +174,28 @@ const DEFAULT_ES_STATE: EsPersistedState = {
 
 // ─── ES Fetch Helper ─────────────────────────────────────────────────────────
 
+// Tunnel executor override — when set, all ES requests go through the tunnel
+// instead of direct HTTP. Similar to the Redis setTunnelExecutor pattern.
+let _esTunnelExecutor: ((method: string, path: string, body: string) => Promise<unknown>) | null = null;
+
+export function setEsTunnelExecutor(
+  fn: ((method: string, path: string, body: string) => Promise<unknown>) | null
+) {
+  _esTunnelExecutor = fn;
+}
+
 async function esFetch(
   conn: EsConnection,
   path: string,
   options?: RequestInit
 ): Promise<unknown> {
+  // If tunnel executor is set, route through the tunnel
+  if (_esTunnelExecutor) {
+    const method = (options?.method ?? "GET").toUpperCase();
+    const body = typeof options?.body === "string" ? options.body : "";
+    return _esTunnelExecutor(method, path, body);
+  }
+
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (conn.authType === "basic") {
     headers["Authorization"] = `Basic ${btoa(`${conn.username}:${conn.password}`)}`;
@@ -2599,6 +2618,9 @@ function ConnectionsDialog({
 // ─── No-connection empty state ────────────────────────────────────────────────
 
 function NoConnectionState({ onAdd }: { onAdd: () => void }) {
+  const { data: session } = useSession();
+  const [tunnelOpen, setTunnelOpen] = useState(false);
+
   return (
     <div className="flex flex-col items-center justify-center h-full w-full gap-4 text-center p-8">
       <div className="rounded-full bg-muted p-4">
@@ -2610,10 +2632,29 @@ function NoConnectionState({ onAdd }: { onAdd: () => void }) {
           Add an Elasticsearch cluster to get started
         </p>
       </div>
-      <Button onClick={onAdd} size="sm">
-        <Plus className="h-4 w-4 mr-1.5" />
-        Add Connection
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button onClick={onAdd} size="sm">
+          <Plus className="h-4 w-4 mr-1.5" />
+          Add Connection
+        </Button>
+        {session?.user && (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setTunnelOpen(true)}>
+              <Wifi className="h-4 w-4 mr-1.5" />
+              Connect via Tunnel
+            </Button>
+            <TunnelConnectDialog open={tunnelOpen} onOpenChange={setTunnelOpen} />
+          </>
+        )}
+      </div>
+      {!session?.user && (
+        <p className="text-xs text-muted-foreground/60">
+          <Link href="/account" className="underline underline-offset-2 hover:text-foreground transition-colors">
+            Sign in
+          </Link>{" "}
+          to connect your own cluster via a secure tunnel
+        </p>
+      )}
     </div>
   );
 }
@@ -2644,10 +2685,12 @@ function NoTabState({ onNewQuery }: { onNewQuery: () => void }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function ElasticsearchExplorer() {
+export function ElasticsearchExplorer({ tunnelMode }: { tunnelMode?: boolean } = {}) {
   // Synced connections
   const connSync = useSyncedState<EsConnection[]>("1tt:es-connections", []);
-  const connections = connSync.data;
+  const connections = tunnelMode
+    ? [{ id: "tunnel", name: "Tunnel", url: "", authType: "none" as AuthType }]
+    : connSync.data;
   const setConnections = connSync.setData;
 
   // Synced explorer state (tabs, active connection, query counter, saved queries)
@@ -2655,11 +2698,11 @@ export function ElasticsearchExplorer() {
   const esState = stateSync.data;
   const setEsState = stateSync.setData;
 
-
-  const activeConnId = esState.activeConnId;
+  const activeConnId = tunnelMode ? "tunnel" : esState.activeConnId;
   const setActiveConnId = useCallback((id: string | null) => {
+    if (tunnelMode) return;
     setEsState((prev) => ({ ...prev, activeConnId: id }));
-  }, [setEsState]);
+  }, [setEsState, tunnelMode]);
 
   const tabs = esState.tabs;
   const setTabs = useCallback((updater: EsTab[] | ((prev: EsTab[]) => EsTab[])) => {
@@ -2834,6 +2877,8 @@ export function ElasticsearchExplorer() {
   const activeIndexName = activeTab?.type === "index" ? activeTab.indexName : null;
 
   const [showConnDialog, setShowConnDialog] = useState(false);
+  const [showTunnelDialog, setShowTunnelDialog] = useState(false);
+  const { data: session } = useSession();
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -2843,6 +2888,20 @@ export function ElasticsearchExplorer() {
           <Database className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">Elasticsearch Explorer</span>
           <div className="flex items-center gap-2 ml-auto">
+            {!tunnelMode && session?.user && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => setShowTunnelDialog(true)}
+                >
+                  <Wifi className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Tunnel</span>
+                </Button>
+                <TunnelConnectDialog open={showTunnelDialog} onOpenChange={setShowTunnelDialog} />
+              </>
+            )}
             <Link
               href="/docs/elasticsearch"
               target="_blank"
@@ -2851,25 +2910,33 @@ export function ElasticsearchExplorer() {
               <BookOpen className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Docs</span>
             </Link>
-            <EsSyncMenu connSync={connSync} stateSync={stateSync} />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-7"
-              onClick={() => setShowConnDialog(true)}
-            >
-              <Server className="h-3.5 w-3.5" />
-              {activeConn ? activeConn.name : "Connections"}
-              {activeConn && (
-                <span className={cn(
-                  "h-2 w-2 rounded-full shrink-0",
-                  connStatus[activeConn.id] === "ok" ? "bg-green-500"
-                    : connStatus[activeConn.id] === "error" ? "bg-red-500"
-                    : connStatus[activeConn.id] === "checking" ? "bg-yellow-500 animate-pulse"
-                    : "bg-muted-foreground/40"
-                )} />
-              )}
-            </Button>
+            {!tunnelMode && <EsSyncMenu connSync={connSync} stateSync={stateSync} />}
+            {!tunnelMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => setShowConnDialog(true)}
+              >
+                <Server className="h-3.5 w-3.5" />
+                {activeConn ? activeConn.name : "Connections"}
+                {activeConn && (
+                  <span className={cn(
+                    "h-2 w-2 rounded-full shrink-0",
+                    connStatus[activeConn.id] === "ok" ? "bg-green-500"
+                      : connStatus[activeConn.id] === "error" ? "bg-red-500"
+                      : connStatus[activeConn.id] === "checking" ? "bg-yellow-500 animate-pulse"
+                      : "bg-muted-foreground/40"
+                  )} />
+                )}
+              </Button>
+            )}
+            {tunnelMode && (
+              <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                <Wifi className="h-3.5 w-3.5" />
+                <span className="font-medium">Tunnel Connected</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

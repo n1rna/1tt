@@ -112,7 +112,7 @@ export function TunnelConnectDialog({
     const serverBase = tokenIdx > 0 ? wsUrl.slice(0, tokenIdx - 1) : wsUrl;
     const isDefault = serverBase === "wss://1tt.dev/ws/tunnel";
     const serverFlag = isDefault ? "" : ` --server ${serverBase}`;
-    const tunnelArgs = `tunnel --token ${tunnel.token}${serverFlag} --db <YOUR_CONNECTION_STRING>`;
+    const tunnelArgs = `tunnel --token ${tunnel.token}${serverFlag} --uri <YOUR_CONNECTION_URI>`;
     return {
       cliCommand: `1tt ${tunnelArgs}`,
       oneLiner: `curl -sSfL https://1tt.dev/cli/install.sh | sh -s -- ${tunnelArgs}`,
@@ -125,6 +125,8 @@ export function TunnelConnectDialog({
     // Route to the correct studio based on dialect
     if (dialect === "redis") {
       router.push(`/account/redis/tunnel/${tunnel.token}`);
+    } else if (dialect === "elasticsearch") {
+      router.push(`/account/elasticsearch/tunnel/${tunnel.token}`);
     } else {
       router.push(`/account/postgres/tunnel/${tunnel.token}`);
     }
@@ -145,7 +147,7 @@ export function TunnelConnectDialog({
           {step === "generate" && (
             <>
               <p className="text-sm text-muted-foreground">
-                Connect your own PostgreSQL or Redis instance to the 1tt.dev studio.
+                Connect your own PostgreSQL, Redis, or Elasticsearch instance to the 1tt.dev studio.
                 Your data stays on your machine — we only relay queries through a secure tunnel.
               </p>
 
@@ -234,9 +236,10 @@ export function TunnelConnectDialog({
                 </div>
 
                 <p className="text-[11px] text-muted-foreground/60">
-                  Replace <code className="font-mono bg-muted px-1 rounded">{"<YOUR_CONNECTION_STRING>"}</code> with your database URL, e.g.{" "}
-                  <code className="font-mono bg-muted px-1 rounded">postgres://user:pass@localhost:5432/mydb</code> or{" "}
-                  <code className="font-mono bg-muted px-1 rounded">redis://localhost:6379</code>
+                  Replace <code className="font-mono bg-muted px-1 rounded">{"<YOUR_CONNECTION_URI>"}</code> with your connection URI, e.g.{" "}
+                  <code className="font-mono bg-muted px-1 rounded">postgres://user:pass@localhost:5432/mydb</code>,{" "}
+                  <code className="font-mono bg-muted px-1 rounded">redis://localhost:6379</code>, or{" "}
+                  <code className="font-mono bg-muted px-1 rounded">http://localhost:9200</code>
                 </p>
               </div>
 
@@ -251,7 +254,7 @@ export function TunnelConnectDialog({
               </div>
 
               <p className="text-[11px] text-muted-foreground/50">
-                Don&apos;t have the CLI? Install it with: <code className="font-mono bg-muted px-1 rounded">npm install -g @1tt/cli</code>
+                Don&apos;t have the CLI? Install it with: <code className="font-mono bg-muted px-1 rounded">curl -sSfL https://1tt.dev/cli/install.sh | sh</code>
               </p>
             </>
           )}
@@ -273,7 +276,7 @@ export function TunnelConnectDialog({
                   <div className="flex items-center gap-2">
                     <Database className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm">
-                      {dialect === "postgres" ? "PostgreSQL" : "Redis"}
+                      {dialect === "postgres" ? "PostgreSQL" : dialect === "elasticsearch" ? "Elasticsearch" : "Redis"}
                       {version && <span className="text-muted-foreground ml-1">{version}</span>}
                     </span>
                   </div>

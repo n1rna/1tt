@@ -28,29 +28,30 @@ const (
 
 var (
 	flagToken  string
-	flagDB     string
+	flagURI    string
 	flagServer string
 )
 
 var tunnelCmd = &cobra.Command{
 	Use:   "tunnel",
 	Short: "Create a tunnel from your local database to the 1tt.dev web studio",
-	Long: `Opens a secure WebSocket tunnel between your local database and the 1tt.dev
-web studio. Supports PostgreSQL and Redis connection strings.
+	Long: `Opens a secure WebSocket tunnel between your local service and the 1tt.dev
+web studio. Supports PostgreSQL, Redis, and Elasticsearch connection strings.
 
 Examples:
-  1tt tunnel --token mytoken --db postgres://user:pass@localhost:5432/mydb
-  1tt tunnel --token mytoken --db redis://localhost:6379`,
+  1tt tunnel --token mytoken --uri postgres://user:pass@localhost:5432/mydb
+  1tt tunnel --token mytoken --uri redis://localhost:6379
+  1tt tunnel --token mytoken --uri http://localhost:9200`,
 	RunE: runTunnel,
 }
 
 func init() {
 	tunnelCmd.Flags().StringVar(&flagToken, "token", "", "Authentication token from 1tt.dev (required)")
-	tunnelCmd.Flags().StringVar(&flagDB, "db", "", "Database connection string (required)")
+	tunnelCmd.Flags().StringVar(&flagURI, "uri", "", "Connection URI (required)")
 	tunnelCmd.Flags().StringVar(&flagServer, "server", "wss://1tt.dev/ws/tunnel", "WebSocket server URL")
 
 	_ = tunnelCmd.MarkFlagRequired("token")
-	_ = tunnelCmd.MarkFlagRequired("db")
+	_ = tunnelCmd.MarkFlagRequired("uri")
 }
 
 func isTTY() bool {
@@ -82,8 +83,10 @@ func detectDialect(connStr string) (string, error) {
 		return "postgres", nil
 	case strings.HasPrefix(lower, "redis://"), strings.HasPrefix(lower, "rediss://"):
 		return "redis", nil
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+		return "elasticsearch", nil
 	default:
-		return "", fmt.Errorf("unsupported connection string scheme — expected postgres://, postgresql://, redis://, or rediss://")
+		return "", fmt.Errorf("unsupported connection string scheme — expected postgres://, postgresql://, redis://, rediss://, http://, or https://")
 	}
 }
 
@@ -104,10 +107,15 @@ type redisExecutorIface interface {
 	Execute(ctx context.Context, args []string) (any, error)
 }
 
+// esExecutorIface is the Elasticsearch-specific execute signature.
+type esExecutorIface interface {
+	Execute(ctx context.Context, method, path, body string) (any, error)
+}
+
 func runTunnel(cmd *cobra.Command, args []string) error {
 	printBanner()
 
-	dialect, err := detectDialect(flagDB)
+	dialect, err := detectDialect(flagURI)
 	if err != nil {
 		return err
 	}
@@ -119,23 +127,31 @@ func runTunnel(cmd *cobra.Command, args []string) error {
 
 	var pgExec *executor.PostgresExecutor
 	var rdExec *executor.RedisExecutor
+	var esExec *executor.ElasticsearchExecutor
 	var dbExec dbExecutor
 
 	switch dialect {
 	case "postgres":
-		pgExec, err = executor.NewPostgres(flagDB)
+		pgExec, err = executor.NewPostgres(flagURI)
 		if err != nil {
 			return fmt.Errorf("%s failed to connect to PostgreSQL: %w", color(colorRed, "✗"), err)
 		}
 		dbExec = pgExec
 		defer pgExec.Close()
 	case "redis":
-		rdExec, err = executor.NewRedis(flagDB)
+		rdExec, err = executor.NewRedis(flagURI)
 		if err != nil {
 			return fmt.Errorf("%s failed to connect to Redis: %w", color(colorRed, "✗"), err)
 		}
 		dbExec = rdExec
 		defer rdExec.Close()
+	case "elasticsearch":
+		esExec, err = executor.NewElasticsearch(flagURI)
+		if err != nil {
+			return fmt.Errorf("%s failed to connect to Elasticsearch: %w", color(colorRed, "✗"), err)
+		}
+		dbExec = esExec
+		defer esExec.Close()
 	}
 
 	fmt.Printf("  %s Connected to local %s database\n", color(colorGreen, "✓"), dialect)
@@ -221,7 +237,7 @@ func runTunnel(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("websocket error: %w", err)
 
 		case msg := <-msgCh:
-			if err := handleMessage(ctx, msg, wsClient, dialect, pgExec, rdExec, dbExec); err != nil {
+			if err := handleMessage(ctx, msg, wsClient, dialect, pgExec, rdExec, esExec, dbExec); err != nil {
 				fmt.Printf("  %s handler error: %v\n", color(colorRed, "✗"), err)
 			}
 		}
@@ -235,6 +251,7 @@ func handleMessage(
 	dialect string,
 	pgExec *executor.PostgresExecutor,
 	rdExec *executor.RedisExecutor,
+	esExec *executor.ElasticsearchExecutor,
 	dbExec dbExecutor,
 ) error {
 	switch msg.Type {
@@ -242,7 +259,7 @@ func handleMessage(
 		return wsClient.Send(ws.Message{Type: "pong"})
 
 	case "query":
-		return handleQuery(ctx, msg, wsClient, dialect, pgExec, rdExec)
+		return handleQuery(ctx, msg, wsClient, dialect, pgExec, rdExec, esExec)
 
 	case "schema":
 		return handleSchema(ctx, msg, wsClient, dbExec)
@@ -260,6 +277,7 @@ func handleQuery(
 	dialect string,
 	pgExec *executor.PostgresExecutor,
 	rdExec *executor.RedisExecutor,
+	esExec *executor.ElasticsearchExecutor,
 ) error {
 	switch dialect {
 	case "postgres":
@@ -286,6 +304,27 @@ func handleQuery(
 			return sendError(wsClient, msg.ID, "no command provided")
 		}
 		result, err := rdExec.Execute(ctx, payload.Command)
+		if err != nil {
+			return sendError(wsClient, msg.ID, err.Error())
+		}
+		return sendResult(wsClient, msg.ID, result)
+
+	case "elasticsearch":
+		var payload struct {
+			Method string `json:"method"`
+			Path   string `json:"path"`
+			Body   string `json:"body"`
+		}
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			return sendError(wsClient, msg.ID, "invalid query payload: "+err.Error())
+		}
+		if payload.Method == "" {
+			payload.Method = "GET"
+		}
+		if payload.Path == "" {
+			payload.Path = "/"
+		}
+		result, err := esExec.Execute(ctx, payload.Method, payload.Path, payload.Body)
 		if err != nil {
 			return sendError(wsClient, msg.ID, err.Error())
 		}

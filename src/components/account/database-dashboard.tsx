@@ -34,6 +34,13 @@ import { ApiInfoDialog } from "@/components/account/hosted-sqlite-api-dialog";
 import { TunnelConnectDialog } from "@/components/account/tunnel-connect-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -51,6 +58,7 @@ import {
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   Copy,
   Database,
   Eye,
@@ -280,8 +288,7 @@ function StorageBucketCard({
 
 const BUCKET_NAME_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
-function CreateBucketDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
+function CreateBucketDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -294,7 +301,7 @@ function CreateBucketDialog({ onCreated }: { onCreated: () => void }) {
     setError(null);
     try {
       await createBucket(name.trim());
-      setOpen(false);
+      onOpenChange(false);
       setName("");
       onCreated();
     } catch (err) {
@@ -305,17 +312,7 @@ function CreateBucketDialog({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        New Bucket
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Storage Bucket</DialogTitle>
@@ -363,7 +360,6 @@ function CreateBucketDialog({ onCreated }: { onCreated: () => void }) {
           </div>
         </DialogContent>
       </Dialog>
-    </>
   );
 }
 
@@ -849,8 +845,7 @@ function RedisDatabaseCard({
 
 // ── Create Redis Dialog ────────────────────────────
 
-function CreateRedisDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
+function CreateRedisDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [region, setRegion] = useState("us-east-1");
   const [creating, setCreating] = useState(false);
@@ -862,7 +857,7 @@ function CreateRedisDialog({ onCreated }: { onCreated: () => void }) {
     setError(null);
     try {
       await createRedis(name.trim(), region);
-      setOpen(false);
+      onOpenChange(false);
       setName("");
       setRegion("us-east-1");
       onCreated();
@@ -874,17 +869,7 @@ function CreateRedisDialog({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        New Redis
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Redis Database</DialogTitle>
@@ -943,14 +928,12 @@ function CreateRedisDialog({ onCreated }: { onCreated: () => void }) {
           </div>
         </DialogContent>
       </Dialog>
-    </>
   );
 }
 
 // ── Create Postgres Dialog ─────────────────────────
 
-function CreatePostgresDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
+function CreatePostgresDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [region, setRegion] = useState("aws-us-east-1");
   const [creating, setCreating] = useState(false);
@@ -962,7 +945,7 @@ function CreatePostgresDialog({ onCreated }: { onCreated: () => void }) {
     setError(null);
     try {
       await createDatabase(name.trim(), region);
-      setOpen(false);
+      onOpenChange(false);
       setName("");
       setRegion("aws-us-east-1");
       onCreated();
@@ -974,17 +957,7 @@ function CreatePostgresDialog({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="h-3.5 w-3.5" />
-        New Postgres
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Postgres Database</DialogTitle>
@@ -1043,18 +1016,20 @@ function CreatePostgresDialog({ onCreated }: { onCreated: () => void }) {
           </div>
         </DialogContent>
       </Dialog>
-    </>
   );
 }
 
 // ── Upload SQLite Dialog ───────────────────────────
 
 function UploadSqliteDialog({
+  open,
+  onOpenChange,
   onUploaded,
 }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
   onUploaded: (db: HostedSqliteDB) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -1070,7 +1045,7 @@ function UploadSqliteDialog({
 
   const handleOpenChange = (v: boolean) => {
     if (!v) reset();
-    setOpen(v);
+    onOpenChange(v);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1091,7 +1066,7 @@ function UploadSqliteDialog({
     setError(null);
     try {
       const db = await uploadSqliteDb(file, name.trim());
-      setOpen(false);
+      onOpenChange(false);
       reset();
       onUploaded(db);
     } catch (err) {
@@ -1102,16 +1077,6 @@ function UploadSqliteDialog({
   };
 
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <FileUp className="h-3.5 w-3.5" />
-        Upload SQLite
-      </Button>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1200,7 +1165,6 @@ function UploadSqliteDialog({
           </div>
         </DialogContent>
       </Dialog>
-    </>
   );
 }
 
@@ -1215,6 +1179,10 @@ function DatabaseDashboardInner() {
   const { data: billing, loading: billingLoading } = useBillingStatus();
   const [pendingApiDb, setPendingApiDb] = useState<HostedSqliteDB | null>(null);
   const [tunnelOpen, setTunnelOpen] = useState(false);
+  const [postgresOpen, setPostgresOpen] = useState(false);
+  const [sqliteOpen, setSqliteOpen] = useState(false);
+  const [redisOpen, setRedisOpen] = useState(false);
+  const [bucketOpen, setBucketOpen] = useState(false);
 
   const loading = neonLoading || sqliteLoading || redisLoading || storageLoading;
   const error = neonError ?? sqliteError ?? redisError ?? storageError ?? null;
@@ -1257,22 +1225,45 @@ function DatabaseDashboardInner() {
           </p>
         </div>
         {!loading && !error && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <CreatePostgresDialog onCreated={refetchAll} />
-            <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
-            <CreateRedisDialog onCreated={refetchAll} />
-            <CreateBucketDialog onCreated={refetchAll} />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => setTunnelOpen(true)}
-            >
-              <Wifi className="h-3.5 w-3.5" />
-              Connect External
-            </Button>
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="gap-2">
+                  <Plus className="h-3.5 w-3.5" />
+                  New
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setPostgresOpen(true)}>
+                  <Database className="h-4 w-4" />
+                  PostgreSQL
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRedisOpen(true)}>
+                  <Database className="h-4 w-4" />
+                  Redis
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSqliteOpen(true)}>
+                  <FileUp className="h-4 w-4" />
+                  Upload SQLite
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBucketOpen(true)}>
+                  <HardDrive className="h-4 w-4" />
+                  Storage Bucket
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setTunnelOpen(true)}>
+                  <Wifi className="h-4 w-4" />
+                  Connect External
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <CreatePostgresDialog open={postgresOpen} onOpenChange={setPostgresOpen} onCreated={refetchAll} />
+            <UploadSqliteDialog open={sqliteOpen} onOpenChange={setSqliteOpen} onUploaded={handleSqliteUploaded} />
+            <CreateRedisDialog open={redisOpen} onOpenChange={setRedisOpen} onCreated={refetchAll} />
+            <CreateBucketDialog open={bucketOpen} onOpenChange={setBucketOpen} onCreated={refetchAll} />
             <TunnelConnectDialog open={tunnelOpen} onOpenChange={setTunnelOpen} />
-          </div>
+          </>
         )}
       </div>
 
@@ -1340,12 +1331,38 @@ function DatabaseDashboardInner() {
               Create your first database to get started.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            <CreatePostgresDialog onCreated={refetchAll} />
-            <UploadSqliteDialog onUploaded={handleSqliteUploaded} />
-            <CreateRedisDialog onCreated={refetchAll} />
-            <CreateBucketDialog onCreated={refetchAll} />
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus className="h-3.5 w-3.5" />
+                Create
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setPostgresOpen(true)}>
+                <Database className="h-4 w-4" />
+                PostgreSQL
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setRedisOpen(true)}>
+                <Database className="h-4 w-4" />
+                Redis
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSqliteOpen(true)}>
+                <FileUp className="h-4 w-4" />
+                Upload SQLite
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBucketOpen(true)}>
+                <HardDrive className="h-4 w-4" />
+                Storage Bucket
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setTunnelOpen(true)}>
+                <Wifi className="h-4 w-4" />
+                Connect External
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 

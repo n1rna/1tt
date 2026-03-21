@@ -202,6 +202,18 @@ tunnel-stop:
     pkill -f "cloudflared tunnel" 2>/dev/null || echo "No tunnel running"
 
 # =========================================
+# CLI
+# =========================================
+
+# Run the 1tt CLI (pass arguments after --)
+cli *args:
+    cd cli && go run . {{args}}
+
+# Build the 1tt CLI binary
+cli-build:
+    cd cli && CGO_ENABLED=0 go build -o 1tt .
+
+# =========================================
 # Utilities
 # =========================================
 

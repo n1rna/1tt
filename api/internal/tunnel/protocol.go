@@ -21,10 +21,15 @@ type Message struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// QueryPayload carries the SQL statement (postgres) or Redis command (redis).
+// QueryPayload carries the SQL statement (postgres), Redis command (redis),
+// or Elasticsearch HTTP request fields (elasticsearch).
 type QueryPayload struct {
 	SQL     string   `json:"sql,omitempty"`
 	Command []string `json:"command,omitempty"`
+	// Elasticsearch HTTP request fields
+	Method string `json:"method,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Body   string `json:"body,omitempty"`
 }
 
 // ResultPayload carries the response to a successful query.

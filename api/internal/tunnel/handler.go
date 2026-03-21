@@ -230,10 +230,10 @@ func HandleStatus(hub *TunnelHub) http.HandlerFunc {
 	}
 }
 
-// HandleQuery forwards a SQL/Redis query to the CLI and waits for the result.
+// HandleQuery forwards a SQL/Redis/Elasticsearch query to the CLI and waits for the result.
 //
 //	POST /api/v1/tunnel/{token}/query
-//	Body: {"sql": "SELECT 1"}  or  {"command": ["GET", "key"]}
+//	Body: {"sql": "SELECT 1"}  or  {"command": ["GET", "key"]}  or  {"method": "GET", "path": "/_cat/indices"}
 func HandleQuery(hub *TunnelHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
@@ -254,8 +254,8 @@ func HandleQuery(hub *TunnelHub) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
-		if body.SQL == "" && len(body.Command) == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sql or command is required"})
+		if body.SQL == "" && len(body.Command) == 0 && body.Method == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sql, command, or method+path is required"})
 			return
 		}
 

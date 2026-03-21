@@ -25,7 +25,7 @@ export async function createTunnel(): Promise<TunnelToken> {
 
 export async function queryTunnel(
   token: string,
-  payload: { sql?: string; command?: string[] }
+  payload: { sql?: string; command?: string[]; method?: string; path?: string; body?: string }
 ): Promise<{ columns?: string[]; rows?: unknown[][]; rows_affected?: number; result?: unknown; message?: string }> {
   const res = await fetch(`/api/proxy/tunnel/${token}/query`, {
     method: "POST",
