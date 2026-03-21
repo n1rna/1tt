@@ -425,10 +425,16 @@ func (s *Service) pollCrawl(ctx context.Context, jobID, cfJobID string) error {
 				continue
 			}
 
-			// Update pages_crawled in DB (also serves as a heartbeat)
+			// Update pages_crawled in DB (also serves as a heartbeat).
+			// Use the greater of Total (pages discovered) and Finished (pages completed)
+			// so the frontend shows progress as soon as pages are found.
+			crawledCount := status.Finished
+			if status.Total > crawledCount {
+				crawledCount = status.Total
+			}
 			s.db.ExecContext(ctx,
 				`UPDATE llms_jobs SET pages_crawled = $1, cf_status = $2, updated_at = NOW() WHERE id = $3`,
-				status.Finished, status.Status, jobID)
+				crawledCount, status.Status, jobID)
 
 			switch status.Status {
 			case "completed":
