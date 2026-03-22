@@ -160,6 +160,7 @@ func main() {
 		r.Post("/dns/lookup", handler.DNSLookup(cfg))
 		r.Post("/og-check", handler.OgCheck(cfg))
 		r.Post("/ssl-check", handler.SslCheck(cfg))
+		r.Post("/email-check", handler.EmailCheck(cfg))
 
 		// Polar webhook (public, uses signature verification)
 		if billingClient != nil {

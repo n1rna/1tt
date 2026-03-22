@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useSyncedState } from "./use-synced-state";
 
-export type LookupTool = "dns" | "og" | "ssl";
+export type LookupTool = "dns" | "og" | "ssl" | "email";
 
 export interface LookupHistoryEntry {
   id: string;

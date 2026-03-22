@@ -55,15 +55,20 @@ interface BadgeConfig {
 function buildBadgeUrl(config: BadgeConfig, base: string): string {
   const { label, message, color, style, labelColor, logo, logoColor } = config;
 
-  const msgEncoded = encodeBadgeSegment(message || "badge");
   const colorEncoded = encodeBadgeSegment(color || "blue");
 
   let spec: string;
-  if (label.trim()) {
-    const labelEncoded = encodeBadgeSegment(label);
-    spec = `${labelEncoded}-${msgEncoded}-${colorEncoded}`;
+  if (label.trim() && message.trim()) {
+    spec = `${encodeBadgeSegment(label)}-${encodeBadgeSegment(message)}-${colorEncoded}`;
+  } else if (label.trim()) {
+    spec = `${encodeBadgeSegment(label)}-${colorEncoded}`;
+  } else if (message.trim()) {
+    spec = `${encodeBadgeSegment(message)}-${colorEncoded}`;
+  } else if (logo.trim()) {
+    // no text, just logo — use special marker
+    spec = `_empty-${colorEncoded}`;
   } else {
-    spec = `${msgEncoded}-${colorEncoded}`;
+    return "";
   }
 
   const params = new URLSearchParams();
@@ -105,22 +110,6 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       )}
       {label && <span>{copied ? "Copied!" : label}</span>}
     </button>
-  );
-}
-
-// ── Snippet row ───────────────────────────────────────────────────────────────
-
-function SnippetRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <CopyButton text={value} />
-      </div>
-      <pre className="text-[11px] font-mono bg-muted/30 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-        {value}
-      </pre>
-    </div>
   );
 }
 
@@ -200,10 +189,6 @@ export function BadgeGenerator() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [label, message, color, style, labelColor, logo, logoColor, mounted]);
-
-  const markdownSnippet = `![${label || message}](${shareUrl})`;
-  const htmlSnippet = `<img src="${shareUrl}" alt="${label || message}">`;
-  const rstSnippet = `.. image:: ${shareUrl}\n   :alt: ${label || message}`;
 
   return (
     <ToolLayout slug="badge">
@@ -345,7 +330,9 @@ export function BadgeGenerator() {
               Preview
             </p>
             <div className="flex items-center justify-center min-h-[48px] rounded-lg bg-muted/20 p-4">
-              {previewUrl ? (
+              {!badgeUrl ? (
+                <span className="text-xs text-muted-foreground">Enter a label, message, or logo to generate a badge.</span>
+              ) : previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
@@ -359,6 +346,7 @@ export function BadgeGenerator() {
             </div>
 
             {/* Badge URL */}
+            {badgeUrl && (
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground">Badge URL</span>
@@ -368,6 +356,7 @@ export function BadgeGenerator() {
                 {shareUrl}
               </div>
             </div>
+            )}
           </div>
 
           {/* llms.txt reference */}

@@ -69,6 +69,9 @@ func badgeSegmentDecode(s string) string {
 // charWidth returns an approximate pixel width for a string rendered in
 // Verdana 11px.  The multiplier is tuned to match shields.io sizing.
 func charWidth(s string, perChar float64) float64 {
+	if strings.TrimSpace(s) == "" {
+		return 0
+	}
 	return float64(len(s))*perChar + 20 // 10px padding each side
 }
 
@@ -436,6 +439,15 @@ func Badge() http.HandlerFunc {
 			colorRaw = parts[len(parts)-1]
 			message = parts[len(parts)-2]
 			label = strings.Join(parts[:len(parts)-2], "-")
+		}
+
+		// Handle _empty marker — icon-only badge with no text.
+		// Must check before badgeSegmentDecode since _ is a space in shields encoding.
+		if message == "_empty" {
+			message = ""
+		}
+		if label == "_empty" {
+			label = ""
 		}
 
 		// Apply shields.io path encoding rules.

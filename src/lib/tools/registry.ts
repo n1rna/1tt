@@ -254,6 +254,14 @@ export const tools: ToolDefinition[] = [
     keywords: ["ssl", "tls", "certificate", "https", "security", "expiry", "certificate chain", "x509"],
   },
   {
+    slug: "email-checker",
+    name: "Email Configuration Checker",
+    description: "Check email DNS records and deliverability - SPF, DKIM, DMARC, MX, reverse DNS, and more",
+    category: "web",
+    icon: "MailCheck",
+    keywords: ["email", "spf", "dkim", "dmarc", "mx", "dns", "deliverability", "spam", "mail server", "bimi", "mta-sts"],
+  },
+  {
     slug: "cors",
     name: "CORS Debugger",
     description: "Check CORS headers and debug cross-origin request issues",
