@@ -196,6 +196,61 @@
 				"type": "string",
 				"required": true,
 				"secret": true
+			},
+			"TELEGRAM_BOT_TOKEN": {
+				"name": "TELEGRAM_BOT_TOKEN",
+				"title": "Telegram Bot API token",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"TELEGRAM_WEBHOOK_SECRET": {
+				"name": "TELEGRAM_WEBHOOK_SECRET",
+				"title": "Secret for Telegram webhook validation",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"EMAIL_WEBHOOK_SECRET": {
+				"name": "EMAIL_WEBHOOK_SECRET",
+				"title": "Shared secret for email inbound webhook",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"RESEND_API_KEY": {
+				"name": "RESEND_API_KEY",
+				"title": "Resend API key for sending emails",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"RESEND_FROM_EMAIL": {
+				"name": "RESEND_FROM_EMAIL",
+				"title": "From address for Resend emails",
+				"type": "string",
+				"default": "1tt Life <life@1tt.dev>",
+				"required": false
+			},
+			"GOOGLE_CLIENT_ID": {
+				"name": "GOOGLE_CLIENT_ID",
+				"title": "Google OAuth2 client ID",
+				"type": "string",
+				"required": false
+			},
+			"GOOGLE_CLIENT_SECRET": {
+				"name": "GOOGLE_CLIENT_SECRET",
+				"title": "Google OAuth2 client secret",
+				"type": "string",
+				"required": false,
+				"secret": true
+			},
+			"GOOGLE_REDIRECT_URI": {
+				"name": "GOOGLE_REDIRECT_URI",
+				"title": "Google OAuth2 redirect URI",
+				"type": "string",
+				"default": "https://1tt.dev/tools/life/calendar/callback",
+				"required": false
 			}
 		}
 	},
