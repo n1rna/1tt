@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Copy, Check, ExternalLink } from "lucide-react";
+import { Copy, Check, ExternalLink, BookOpen } from "lucide-react";
 import { ToolLayout } from "@/components/layout/tool-layout";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -370,15 +370,25 @@ export function BadgeGenerator() {
             </div>
           </div>
 
-          {/* Snippets */}
-          <div className="rounded-xl border bg-muted/10 p-5 space-y-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Copy snippet
+          {/* llms.txt reference */}
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">For AI agents and coding assistants</p>
+            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+              Paste the llms.txt file into your AI assistant to let it generate badges automatically for your projects.
             </p>
-            <SnippetRow label="Markdown" value={markdownSnippet} />
-            <SnippetRow label="HTML" value={htmlSnippet} />
-            <SnippetRow label="reStructuredText" value={rstSnippet} />
+            <div className="flex items-center gap-2 mt-1.5">
+              <a
+                href="/tools/badge/llms.txt"
+                target="_blank"
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline underline-offset-2"
+              >
+                <BookOpen className="h-3 w-3" />
+                llms.txt
+              </a>
+              <CopyButton text={mounted ? `${origin}/tools/badge/llms.txt` : ""} label="Copy URL" />
+            </div>
           </div>
+
         </div>
       </div>
     </ToolLayout>

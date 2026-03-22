@@ -64,6 +64,15 @@ export default function BadgePage() {
             <li>License badges like <ToolInfo.Code>license-MIT-lightgrey</ToolInfo.Code> in open-source project READMEs</li>
             <li>Custom project or team badges for internal documentation portals</li>
           </ToolInfo.UL>
+
+          <ToolInfo.H2>AI agent integration</ToolInfo.H2>
+          <ToolInfo.P>
+            A machine-readable <ToolInfo.Code>llms.txt</ToolInfo.Code> file is available at{" "}
+            <ToolInfo.Code>/tools/badge/llms.txt</ToolInfo.Code> containing the full badge URL specification,
+            all named colors, style options, logo slugs, and ready-to-use badge patterns for common use cases.
+            Paste this file into your AI coding assistant (Claude, Cursor, GitHub Copilot, or any LLM-powered tool)
+            and ask it to add badges to your project — it will construct the correct URLs automatically.
+          </ToolInfo.P>
         </ToolInfo>
       </div>
     </>

@@ -90,36 +90,41 @@ type badgeParams struct {
 	labelColor string
 	msgColor   string
 	style      string
-	logoSVG    string // reserved for future logo embedding
+	logoSVG    string // base64 data URI of the logo SVG
+}
+
+// logoOffset returns the extra width needed for the logo area and the
+// SVG <image> element string. height is the badge height (20 or 28).
+func logoLayout(p badgeParams, height int) (extraW float64, element string) {
+	if p.logoSVG == "" {
+		return 0, ""
+	}
+	iconH := float64(height) - 6.0 // 3px top/bottom padding
+	iconW := iconH                   // square icon
+	extraW = iconW + 7.0             // icon + right padding
+	x := 5.0
+	y := 3.0
+	element = fmt.Sprintf(`<image x="%.0f" y="%.0f" width="%.0f" height="%.0f" href="%s"/>`,
+		x, y, iconW, iconH, p.logoSVG)
+	return extraW, element
 }
 
 func renderFlat(p badgeParams) string {
 	cw := 6.5
-	logoW := 0.0
-	if p.logoSVG != "" {
-		logoW = 21.0 // 14px icon + 7px padding
-	}
+	logoW, logoElement := logoLayout(p, 20)
 	lw := charWidth(p.label, cw) + logoW
 	mw := charWidth(p.message, cw)
-	if p.label == "" && p.logoSVG == "" {
+	if p.label == "" && logoW == 0 {
 		lw = 0
-	} else if p.label == "" && p.logoSVG != "" {
-		lw = logoW + 2 // just the logo with minimal padding
+	} else if p.label == "" && logoW > 0 {
+		lw = logoW + 2
 	}
 	tw := lw + mw
-	lx := (lw+logoW)/2 + 1
-	if p.logoSVG != "" && p.label != "" {
-		lx = logoW + (lw-logoW)/2 + 1
-	}
+	lx := logoW + (lw-logoW)/2 + 1
 	mx := lw + mw/2 + 1
 
 	lLabel := escapeSVG(p.label)
 	lMsg := escapeSVG(p.message)
-
-	var logoElement string
-	if p.logoSVG != "" {
-		logoElement = fmt.Sprintf(`<image x="5" y="3" width="14" height="14" href="%s"/>`, p.logoSVG)
-	}
 
 	var labelRect string
 	if lw > 0 {
@@ -166,20 +171,19 @@ func renderFlat(p badgeParams) string {
 
 func renderFlatSquare(p badgeParams) string {
 	cw := 6.5
-	lw := charWidth(p.label, cw)
+	logoW, logoElement := logoLayout(p, 20)
+	lw := charWidth(p.label, cw) + logoW
 	mw := charWidth(p.message, cw)
-	if p.label == "" {
-		lw = 0
-	}
+	if p.label == "" && logoW == 0 { lw = 0 } else if p.label == "" && logoW > 0 { lw = logoW + 2 }
 	tw := lw + mw
-	lx := lw/2 + 1
+	lx := logoW + (lw-logoW)/2 + 1
 	mx := lw + mw/2 + 1
 
 	lLabel := escapeSVG(p.label)
 	lMsg := escapeSVG(p.message)
 
 	var labelRect string
-	if p.label != "" {
+	if lw > 0 {
 		labelRect = fmt.Sprintf(`<rect width="%.0f" height="20" fill="%s"/>`, lw, p.labelColor)
 	}
 
@@ -195,6 +199,7 @@ func renderFlatSquare(p badgeParams) string {
     %s
     <rect x="%.0f" width="%.0f" height="20" fill="%s"/>
   </g>
+  %s
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-rendering="geometricPrecision">
     %s
     <text x="%.1f" y="14" fill="#010101" fill-opacity=".3">%s</text>
@@ -204,6 +209,7 @@ func renderFlatSquare(p badgeParams) string {
 		tw,
 		labelRect,
 		lw, mw, p.msgColor,
+		logoElement,
 		labelText,
 		mx, lMsg,
 		mx, lMsg,
@@ -212,13 +218,12 @@ func renderFlatSquare(p badgeParams) string {
 
 func renderPlastic(p badgeParams) string {
 	cw := 6.5
-	lw := charWidth(p.label, cw)
+	logoW, logoElement := logoLayout(p, 18)
+	lw := charWidth(p.label, cw) + logoW
 	mw := charWidth(p.message, cw)
-	if p.label == "" {
-		lw = 0
-	}
+	if p.label == "" && logoW == 0 { lw = 0 } else if p.label == "" && logoW > 0 { lw = logoW + 2 }
 	tw := lw + mw
-	lx := lw/2 + 1
+	lx := logoW + (lw-logoW)/2 + 1
 	mx := lw + mw/2 + 1
 
 	lLabel := escapeSVG(p.label)
@@ -251,6 +256,7 @@ func renderPlastic(p badgeParams) string {
     <rect x="%.0f" width="%.0f" height="18" fill="%s"/>
     <rect width="%.0f" height="18" fill="url(#s)"/>
   </g>
+  %s
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-rendering="geometricPrecision">
     %s
     <text x="%.1f" y="13" fill="#010101" fill-opacity=".3">%s</text>
@@ -261,6 +267,7 @@ func renderPlastic(p badgeParams) string {
 		labelRect,
 		lw, mw, p.msgColor,
 		tw,
+		logoElement,
 		labelText,
 		mx, lMsg,
 		mx, lMsg,
@@ -269,15 +276,14 @@ func renderPlastic(p badgeParams) string {
 
 func renderForTheBadge(p badgeParams) string {
 	cw := 7.5
+	logoW, logoElement := logoLayout(p, 28)
 	label := strings.ToUpper(p.label)
 	message := strings.ToUpper(p.message)
-	lw := charWidth(label, cw)
+	lw := charWidth(label, cw) + logoW
 	mw := charWidth(message, cw)
-	if label == "" {
-		lw = 0
-	}
+	if label == "" && logoW == 0 { lw = 0 } else if label == "" && logoW > 0 { lw = logoW + 2 }
 	tw := lw + mw
-	lx := lw/2 + 1
+	lx := logoW + (lw-logoW)/2 + 1
 	mx := lw + mw/2 + 1
 
 	lLabel := escapeSVG(label)
@@ -296,6 +302,7 @@ func renderForTheBadge(p badgeParams) string {
     %s
     <rect x="%.0f" width="%.0f" height="28" fill="%s"/>
   </g>
+  %s
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" text-rendering="geometricPrecision">
     %s
     <text x="%.1f" y="19" fill="#fff" font-weight="bold" letter-spacing="1">%s</text>
@@ -304,6 +311,7 @@ func renderForTheBadge(p badgeParams) string {
 		tw,
 		labelRect,
 		lw, mw, p.msgColor,
+		logoElement,
 		labelText,
 		mx, lMsg,
 	)
@@ -311,13 +319,12 @@ func renderForTheBadge(p badgeParams) string {
 
 func renderSocial(p badgeParams) string {
 	cw := 6.5
-	lw := charWidth(p.label, cw)
+	logoW, logoElement := logoLayout(p, 20)
+	lw := charWidth(p.label, cw) + logoW
 	mw := charWidth(p.message, cw)
-	if p.label == "" {
-		lw = 0
-	}
+	if p.label == "" && logoW == 0 { lw = 0 } else if p.label == "" && logoW > 0 { lw = logoW + 2 }
 	tw := lw + mw
-	lx := lw/2 + 1
+	lx := logoW + (lw-logoW)/2 + 1
 	mx := lw + mw/2 + 1
 
 	lLabel := escapeSVG(p.label)
@@ -343,6 +350,7 @@ func renderSocial(p badgeParams) string {
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="20">
   <style>a:hover #llink{fill:url(#b);stroke:#ccc}</style>
   %s
+  %s
   <g fill="#fff" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="11" text-rendering="geometricPrecision">
     %s
     <text x="%.1f" y="14" fill="#fff" fill-opacity=".4">%s</text>
@@ -351,6 +359,7 @@ func renderSocial(p badgeParams) string {
 </svg>`,
 		tw,
 		labelPart,
+		logoElement,
 		labelText,
 		mx, lMsg,
 		mx, lMsg,
