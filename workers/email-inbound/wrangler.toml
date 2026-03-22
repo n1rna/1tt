@@ -4,7 +4,7 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-API_URL = "https://1tt.dev/api/v1/life/webhooks/email"
+API_URL = "https://onetruetool-api.1twodev.workers.dev/api/v1/life/webhooks/email"
 
 # Cloudflare Email Service binding — sends transactional emails to any recipient
 [[email]]
