@@ -321,14 +321,12 @@ func main() {
 				r.Post("/life/routines", handler.CreateLifeRoutine(db))
 				r.Put("/life/routines/{id}", handler.UpdateLifeRoutine(db))
 				r.Delete("/life/routines/{id}", handler.DeleteLifeRoutine(db))
-				// Google Calendar integration (status always available; others need config).
+				// Google Calendar integration (all routes registered; handlers check nil).
 				r.Get("/life/gcal/status", handler.GetGCalStatus(db))
 				r.Get("/life/gcal/auth-url", handler.GetGCalAuthURL(gcalClient))
-				if gcalClient != nil {
-					r.Post("/life/gcal/callback", handler.GCalCallback(db, gcalClient))
-					r.Delete("/life/gcal", handler.DisconnectGCal(db))
-					r.Get("/life/gcal/events", handler.ListGCalEvents(db, gcalClient))
-				}
+				r.Post("/life/gcal/callback", handler.GCalCallback(db, gcalClient))
+				r.Delete("/life/gcal", handler.DisconnectGCal(db))
+				r.Get("/life/gcal/events", handler.ListGCalEvents(db, gcalClient))
 			}
 			if llmsSvc != nil && db != nil && r2 != nil {
 				r.Post("/llms/generate", handler.GenerateLlms(llmsSvc))

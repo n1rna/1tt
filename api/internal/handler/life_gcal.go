@@ -73,6 +73,10 @@ func GetGCalAuthURL(gcalClient *life.GCalClient) http.HandlerFunc {
 func GCalCallback(db *sql.DB, gcalClient *life.GCalClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if gcalClient == nil {
+			http.Error(w, `{"error":"Google Calendar is not configured on this server"}`, http.StatusServiceUnavailable)
+			return
+		}
 
 		userID := middleware.GetUserID(r.Context())
 		if userID == "" {
@@ -205,6 +209,10 @@ func DisconnectGCal(db *sql.DB) http.HandlerFunc {
 func ListGCalEvents(db *sql.DB, gcalClient *life.GCalClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if gcalClient == nil {
+			json.NewEncoder(w).Encode(map[string]any{"events": []any{}})
+			return
+		}
 
 		userID := middleware.GetUserID(r.Context())
 		if userID == "" {
