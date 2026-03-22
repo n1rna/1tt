@@ -209,10 +209,10 @@ function CheckData({ data, name }: { data: Record<string, unknown>; name: string
           {data.record as string}
         </pre>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {data.policy && <span>Policy: <span className="font-mono font-medium text-foreground">{data.policy as string}</span></span>}
-          {data.rua && <span>Reports: <span className="font-mono">{data.rua as string}</span></span>}
-          {data.sp && <span>Subdomain: <span className="font-mono">{data.sp as string}</span></span>}
-          {data.pct && <span>Pct: <span className="font-mono">{data.pct as string}%</span></span>}
+          {data.policy != null && <span>Policy: <span className="font-mono font-medium text-foreground">{String(data.policy)}</span></span>}
+          {data.rua != null && <span>Reports: <span className="font-mono">{String(data.rua)}</span></span>}
+          {data.sp != null && <span>Subdomain: <span className="font-mono">{String(data.sp)}</span></span>}
+          {data.pct != null && <span>Pct: <span className="font-mono">{String(data.pct)}%</span></span>}
         </div>
       </div>
     );
@@ -238,14 +238,14 @@ function CheckData({ data, name }: { data: Record<string, unknown>; name: string
   if (name === "MTA-STS") {
     return (
       <div className="space-y-1.5">
-        {data.dnsRecord && (
+        {data.dnsRecord != null && (
           <pre className="text-xs font-mono bg-muted/30 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all">
-            {data.dnsRecord as string}
+            {String(data.dnsRecord)}
           </pre>
         )}
-        {data.mode && (
+        {data.mode != null && (
           <p className="text-xs text-muted-foreground">
-            Mode: <span className="font-mono font-medium text-foreground">{data.mode as string}</span>
+            Mode: <span className="font-mono font-medium text-foreground">{String(data.mode)}</span>
           </p>
         )}
       </div>
