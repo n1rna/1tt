@@ -8,6 +8,7 @@ export interface LifeProfile {
   wakeTime: string | null;
   sleepTime: string | null;
   agentEnabled: boolean;
+  onboarded: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -367,6 +368,10 @@ export async function streamLifeChat(
 }
 
 // ─── Google Calendar ──────────────────────────────────────────────────────────
+
+export async function markOnboarded(): Promise<void> {
+  await lifeApiFetch<void>("/profile/onboarded", { method: "POST" });
+}
 
 export interface GCalStatus {
   connected: boolean;

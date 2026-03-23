@@ -98,6 +98,7 @@ import {
   completeGTask,
   type GTaskList,
   type GTask,
+  markOnboarded,
 } from "@/lib/life";
 import {
   Dialog,
@@ -232,6 +233,7 @@ interface LifePersistedState {
   activeTabId: string | null;
   activeConvId: string | null;
   settings?: LifeSettings;
+  onboarded?: boolean;
 }
 
 const DEFAULT_LIFE_STATE: LifePersistedState = {
@@ -895,6 +897,7 @@ function ChatView({
   onToolEffect,
   onOpenRoutine,
   autoApprove,
+  initialAssistantMessage,
   slotAboveInput,
 }: {
   persistedConvId: string | null;
@@ -906,9 +909,20 @@ function ChatView({
   onToolEffect?: (tool: string) => void;
   onOpenRoutine?: (routineId: string, name: string) => void;
   autoApprove?: boolean;
+  initialAssistantMessage?: string;
   slotAboveInput?: React.ReactNode;
 }) {
-  const [messages, setMessages] = useState<LifeMessage[]>([]);
+  const [messages, setMessages] = useState<LifeMessage[]>(() =>
+    initialAssistantMessage
+      ? [{
+          id: "onboarding-welcome",
+          conversationId: "",
+          role: "assistant",
+          content: initialAssistantMessage,
+          createdAt: new Date().toISOString(),
+        }]
+      : []
+  );
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState("");
@@ -1282,7 +1296,7 @@ function ChatView({
               <MessageBubble msg={msg} isLast={idx === messages.length - 1 && !sending} />
               {msg.role === "assistant" && msg.toolCalls?.map((eff, i) => (
                 <ToolCallDisplay
-                  key={`${eff.tool}-${eff.id ?? i}`}
+                  key={`${eff.tool}-${eff.id || i}`}
                   effect={eff}
                   msgId={msg.id}
                   onActionableRespond={async (actionableId, action, data) => {
@@ -4749,6 +4763,129 @@ function TasksView() {
   );
 }
 
+// ─── Onboarding View ─────────────────────────────────────────────────────────
+
+const ONBOARDING_SYSTEM_CONTEXT = `This is an onboarding conversation. The user just opened the Life Tool for the first time.
+
+Your goal is to:
+1. Welcome them warmly and briefly explain what you can do (manage tasks, routines, calendar, send reminders).
+2. Help them set up their basics: learn about their daily schedule, habits they want to build, goals they have.
+3. Create routines, memories, and tasks based on what they share.
+4. Be conversational and encouraging — this is their first impression.
+
+Keep it natural. Don't overwhelm with a checklist. Start with one question and build from there.
+Do NOT mention connecting calendar or channels — setup links are shown separately in the UI.`;
+
+function OnboardingView({
+  onComplete,
+  onOpenTab,
+}: {
+  onComplete: () => void;
+  onOpenTab: (type: LifeTabType) => void;
+}) {
+  const [step, setStep] = useState<"welcome" | "chat">("welcome");
+
+  if (step === "welcome") {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="max-w-lg w-full space-y-8 text-center">
+          <div className="space-y-3">
+            <div className="mx-auto h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Brain className="h-7 w-7 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Welcome to Life Tool</h1>
+            <p className="text-muted-foreground leading-relaxed">
+              Your personal AI agent for managing daily routines, tasks, and habits. Let me help you get set up.
+            </p>
+          </div>
+
+          {/* Setup cards */}
+          <div className="grid gap-3 text-left">
+            <button
+              onClick={() => onOpenTab("calendar")}
+              className="flex items-center gap-4 rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="h-10 w-10 rounded-lg bg-rose-500/10 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-5 w-5 text-rose-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Connect Google Calendar</p>
+                <p className="text-xs text-muted-foreground">Sync your schedule so the agent knows when you're busy.</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-auto" />
+            </button>
+
+            <button
+              onClick={() => onOpenTab("channels")}
+              className="flex items-center gap-4 rounded-xl border bg-card p-4 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                <Radio className="h-5 w-5 text-cyan-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Connect a channel</p>
+                <p className="text-xs text-muted-foreground">Get reminders via Telegram, WhatsApp, or email.</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-auto" />
+            </button>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => setStep("chat")}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Start chatting with your agent
+            </button>
+            <button
+              onClick={onComplete}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+            >
+              Skip setup — I'll explore on my own
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Getting to know you</span>
+        </div>
+        <button
+          onClick={onComplete}
+          className="text-xs text-primary font-medium hover:underline"
+        >
+          Finish setup
+        </button>
+      </div>
+
+      {/* Chat */}
+      <ChatView
+        persistedConvId={null}
+        onConvIdChange={() => {}}
+        systemContext={ONBOARDING_SYSTEM_CONTEXT}
+        autoApprove={false}
+        initialAssistantMessage={`Hey! I'm your AI life assistant. I'll help you manage your daily routines, tasks, and habits — all through conversation.
+
+To get the most out of this, I'd love to learn a bit about you:
+
+- **What does a typical day look like for you?** (wake time, work hours, wind-down)
+- **Any habits you want to build or maintain?** (exercise, reading, meditation, etc.)
+- **What's on your plate right now?** (tasks, goals, things you keep forgetting)
+
+Just start telling me about yourself and I'll set things up as we go. Everything I create will need your approval first, so don't worry — nothing happens without your say-so.`}
+      />
+    </div>
+  );
+}
+
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
 const START_DAY_OPTIONS: { value: StartDay; label: string }[] = [
@@ -5243,11 +5380,37 @@ export function LifeTool() {
   const chatCounterRef = useRef(0);
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   // Wait for synced state to hydrate from localStorage before rendering content
   useEffect(() => {
     setHydrated(true);
   }, []);
+
+  // Check onboarding status from API on first load
+  useEffect(() => {
+    if (!hydrated || onboardingChecked) return;
+    // If already onboarded locally, skip API check
+    if (lifeState.onboarded) {
+      setOnboardingChecked(true);
+      return;
+    }
+    // Fetch profile to get canonical onboarded flag
+    fetch("/api/proxy/life/profile", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: { profile?: { onboarded?: boolean } }) => {
+        if (data.profile?.onboarded) {
+          setLifeState((prev) => ({ ...prev, onboarded: true }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setOnboardingChecked(true));
+  }, [hydrated, onboardingChecked, lifeState.onboarded, setLifeState]);
+
+  const completeOnboarding = useCallback(() => {
+    markOnboarded().catch(() => {});
+    setLifeState((prev) => ({ ...prev, onboarded: true }));
+  }, [setLifeState]);
 
   // Enable cloud sync by default on first use
   useEffect(() => {
@@ -5452,6 +5615,17 @@ export function LifeTool() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Show onboarding if not yet completed
+  if (onboardingChecked && !lifeState.onboarded) {
+    return (
+      <AuthGate>
+        <div className="flex flex-col h-full overflow-hidden">
+          <OnboardingView onComplete={completeOnboarding} onOpenTab={openTab} />
+        </div>
+      </AuthGate>
     );
   }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/n1rna/1tt/api/internal/billing"
 	"github.com/n1rna/1tt/api/internal/config"
 	"github.com/n1rna/1tt/api/internal/middleware"
+	"github.com/n1rna/1tt/api/internal/query"
 )
 
 // --- Request / response types ---
@@ -78,30 +79,30 @@ type chatMessage struct {
 
 // --- Schema converter ---
 
-// toSchemaTable converts a handler aiQueryTable to ai.SchemaTable.
-func toSchemaTable(t aiQueryTable) ai.SchemaTable {
-	cols := make([]ai.SchemaColumn, len(t.Columns))
+// toSchemaTable converts a handler aiQueryTable to query.SchemaTable.
+func toSchemaTable(t aiQueryTable) query.SchemaTable {
+	cols := make([]query.SchemaColumn, len(t.Columns))
 	for i, c := range t.Columns {
-		cols[i] = ai.SchemaColumn{Name: c.Name, Type: c.Type, IsPrimary: c.IsPrimary}
+		cols[i] = query.SchemaColumn{Name: c.Name, Type: c.Type, IsPrimary: c.IsPrimary}
 	}
-	fks := make([]ai.SchemaForeignKey, len(t.ForeignKeys))
+	fks := make([]query.SchemaForeignKey, len(t.ForeignKeys))
 	for i, fk := range t.ForeignKeys {
-		fks[i] = ai.SchemaForeignKey{Column: fk.Column, RefTable: fk.RefTable, RefColumn: fk.RefColumn}
+		fks[i] = query.SchemaForeignKey{Column: fk.Column, RefTable: fk.RefTable, RefColumn: fk.RefColumn}
 	}
-	return ai.SchemaTable{Schema: t.Schema, Name: t.Name, Columns: cols, ForeignKeys: fks}
+	return query.SchemaTable{Schema: t.Schema, Name: t.Name, Columns: cols, ForeignKeys: fks}
 }
 
-// agentTypeForDialect maps a dialect string to the corresponding AgentType.
-func agentTypeForDialect(dialect string) ai.AgentType {
+// queryDialect maps a dialect string to the query package's Dialect type.
+func queryDialect(dialect string) query.Dialect {
 	switch dialect {
 	case "sqlite":
-		return ai.AgentQuerySQLite
+		return query.DialectSQLite
 	case "redis":
-		return ai.AgentQueryRedis
+		return query.DialectRedis
 	case "elasticsearch":
-		return ai.AgentQueryElasticsearch
+		return query.DialectElasticsearch
 	default:
-		return ai.AgentQueryPostgres
+		return query.DialectPostgres
 	}
 }
 
@@ -151,11 +152,11 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 
 		// Build schema context — used for SQL dialects; empty string for redis/ES
 		// (the prompt template ignores it for those dialects).
-		var schemaTables []ai.SchemaTable
+		var schemaTables []query.SchemaTable
 		for _, t := range req.Schema {
 			schemaTables = append(schemaTables, toSchemaTable(t))
 		}
-		schemaContext := ai.FormatSchemaContext(schemaTables)
+		schemaContext := query.FormatSchemaContext(schemaTables)
 
 		// Build conversation history from the messages array, filtering out any
 		// system messages the frontend may have included.
@@ -163,8 +164,6 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 		var userMessage string
 
 		if len(req.Messages) > 0 {
-			// Conversation mode: collect non-system turns into history;
-			// the last user message becomes the current turn.
 			var nonSystem []chatMessage
 			for _, m := range req.Messages {
 				if m.Role != "system" {
@@ -177,7 +176,6 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 				return
 			}
 
-			// The last message must be from the user.
 			last := nonSystem[len(nonSystem)-1]
 			if last.Role != "user" {
 				http.Error(w, `{"error":"last message must be from the user"}`, http.StatusBadRequest)
@@ -185,16 +183,10 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			}
 			userMessage = last.Content
 
-			// Everything before the last message is history.
 			for _, m := range nonSystem[:len(nonSystem)-1] {
-				role := m.Role
-				if role == "assistant" {
-					role = "assistant"
-				}
-				history = append(history, ai.Message{Role: role, Content: m.Content})
+				history = append(history, ai.Message{Role: m.Role, Content: m.Content})
 			}
 		} else {
-			// Legacy single-turn mode.
 			if strings.TrimSpace(req.Prompt) == "" {
 				http.Error(w, `{"error":"prompt is required"}`, http.StatusBadRequest)
 				return
@@ -215,14 +207,11 @@ func GenerateAiQuery(cfg *config.Config, db *sql.DB) http.HandlerFunc {
 			llmCfg.Model = "kimi-k2-0711-preview"
 		}
 
-		agentResult, agentErr := ai.Run(r.Context(), llmCfg, ai.AgentConfig{
-			Type:        agentTypeForDialect(req.Dialect),
-			UserMessage: userMessage,
-			Context:     schemaContext,
-			History:     history,
-			ExtraData: map[string]any{
-				"dialect": req.Dialect,
-			},
+		agentResult, agentErr := query.Generate(r.Context(), llmCfg, query.GenerateRequest{
+			Dialect:       queryDialect(req.Dialect),
+			UserMessage:   userMessage,
+			SchemaContext: schemaContext,
+			History:       history,
 		})
 
 		if agentErr != nil {

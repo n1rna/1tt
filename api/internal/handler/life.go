@@ -25,6 +25,7 @@ type lifeProfileRecord struct {
 	WakeTime     *string `json:"wakeTime"`
 	SleepTime    *string `json:"sleepTime"`
 	AgentEnabled bool    `json:"agentEnabled"`
+	Onboarded    bool    `json:"onboarded"`
 	CreatedAt    string  `json:"createdAt"`
 	UpdatedAt    string  `json:"updatedAt"`
 }
@@ -89,7 +90,7 @@ func GetLifeProfile(db *sql.DB) http.HandlerFunc {
 		}
 
 		const q = `
-			SELECT user_id, timezone, wake_time, sleep_time, agent_enabled, created_at, updated_at
+			SELECT user_id, timezone, wake_time, sleep_time, agent_enabled, onboarded, created_at, updated_at
 			FROM life_profiles WHERE user_id = $1`
 
 		var rec lifeProfileRecord
@@ -97,7 +98,7 @@ func GetLifeProfile(db *sql.DB) http.HandlerFunc {
 		var createdAt, updatedAt time.Time
 		if err := db.QueryRowContext(r.Context(), q, userID).Scan(
 			&rec.UserID, &rec.Timezone, &wakeTime, &sleepTime,
-			&rec.AgentEnabled, &createdAt, &updatedAt,
+			&rec.AgentEnabled, &rec.Onboarded, &createdAt, &updatedAt,
 		); err != nil {
 			log.Printf("life: get profile for %s: %v", userID, err)
 			http.Error(w, `{"error":"failed to get profile"}`, http.StatusInternalServerError)
@@ -178,6 +179,25 @@ func UpdateLifeProfile(db *sql.DB) http.HandlerFunc {
 		rec.UpdatedAt = updatedAt.UTC().Format(time.RFC3339)
 
 		json.NewEncoder(w).Encode(map[string]any{"profile": rec})
+	}
+}
+
+// MarkOnboarded handles POST /life/profile/onboarded.
+func MarkOnboarded(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		userID := middleware.GetUserID(r.Context())
+		if userID == "" {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		if _, err := db.ExecContext(r.Context(),
+			`UPDATE life_profiles SET onboarded = TRUE, updated_at = NOW() WHERE user_id = $1`, userID,
+		); err != nil {
+			http.Error(w, `{"error":"failed to update profile"}`, http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"onboarded": true})
 	}
 }
 

@@ -21,4 +21,15 @@ enabled = true
 invocation_logs = true
 
 [triggers]
-crons = ["0 3 * * *"]  # daily at 3 AM UTC — cleanup expired files
+crons = ["0 3 * * *", "*/15 * * * *"]
+
+# Queue: producer binding (used by cron to enqueue work items)
+[[queues.producers]]
+queue = "life-scheduler"
+binding = "SCHEDULER_QUEUE"
+
+# Queue: consumer binding (processes work items one at a time)
+[[queues.consumers]]
+queue = "life-scheduler"
+max_batch_size = 1
+max_retries = 2

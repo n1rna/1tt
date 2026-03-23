@@ -173,10 +173,8 @@ func main() {
 			r.Post("/life/webhooks/email", handler.EmailWebhook(cfg, db, lifeAgent))
 		}
 
-		// Internal routes (protected by secret)
-		if r2 != nil && db != nil {
-			r.Post("/internal/cleanup", handler.CleanupExpiredFiles(cfg, db, r2))
-		}
+		// Internal message endpoint (protected by secret, dispatches by type)
+		r.Post("/internal/message", handler.HandleInternalMessage(cfg, db, r2, lifeAgent))
 
 		// Hosted SQLite — API key auth (no session required)
 		if db != nil {
@@ -301,6 +299,7 @@ func main() {
 			if db != nil {
 				r.Get("/life/profile", handler.GetLifeProfile(db))
 				r.Put("/life/profile", handler.UpdateLifeProfile(db))
+				r.Post("/life/profile/onboarded", handler.MarkOnboarded(db))
 				r.Get("/life/channels", handler.ListChannelLinks(db))
 				r.Post("/life/channels", handler.InitChannelLink(db, emailSender))
 				r.Post("/life/channels/{id}/verify", handler.VerifyChannelLink(db))

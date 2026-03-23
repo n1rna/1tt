@@ -347,19 +347,16 @@ func (s *Service) runJob(ctx context.Context, jobID string) error {
 		return err
 	}
 
-	result, err := ai.Run(ctx, &s.llmCfg, ai.AgentConfig{
-		Type: ai.AgentLlmsTxt,
-		ExtraData: map[string]any{
-			"pages":       pages,
-			"detailLevel": detailLevel,
-			"sourceType":  sourceType,
-		},
+	agentResult, err := RunAgent(ctx, &s.llmCfg, AgentRequest{
+		Pages:       pages,
+		DetailLevel: detailLevel,
+		SourceType:  sourceType,
 	})
 	if err != nil {
 		return fmt.Errorf("generate llms.txt: %w", err)
 	}
-	content := result.Output
-	usage := struct{ InputTokens, OutputTokens int }{result.InputTokens, result.OutputTokens}
+	content := agentResult.Content
+	usage := struct{ InputTokens, OutputTokens int }{agentResult.InputTokens, agentResult.OutputTokens}
 
 	// --- Upsert result cache ---
 	resultCacheID := generateID()

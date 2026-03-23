@@ -3,6 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   API_CONTAINER: DurableObjectNamespace<ApiContainer>;
+  SCHEDULER_QUEUE: Queue;
   DATABASE_URL: string;
   ALLOWED_ORIGINS: string;
   TURNSTILE_SECRET_KEY: string;
@@ -40,6 +41,12 @@ interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REDIRECT_URI: string;
+}
+
+// Message types that the container can process.
+interface InternalMessage {
+  type: string;
+  data?: unknown;
 }
 
 export class ApiContainer extends Container<Env> {
@@ -104,11 +111,28 @@ export class ApiContainer extends Container<Env> {
   }
 }
 
+/** Send a typed message to the Go container. */
+async function sendMessage(
+  stub: Container<Env>,
+  secret: string,
+  msg: InternalMessage
+): Promise<Response> {
+  return stub.fetch(
+    new Request("http://internal/api/v1/internal/message", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Secret": secret,
+      },
+      body: JSON.stringify(msg),
+    })
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const stub = getContainer(env.API_CONTAINER);
 
-    // Ensure the container is running before forwarding
     try {
       await stub.startAndWaitForPorts();
     } catch (e) {
@@ -118,24 +142,90 @@ export default {
     return stub.fetch(request);
   },
 
-  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env): Promise<void> {
     const stub = getContainer(env.API_CONTAINER);
 
     try {
       await stub.startAndWaitForPorts();
     } catch (e) {
-      console.error("Cleanup: container startup failed:", e);
+      console.error("Scheduled: container startup failed:", e);
       return;
     }
 
-    const res = await stub.fetch(
-      new Request("http://internal/api/v1/internal/cleanup", {
-        method: "POST",
-        headers: { "X-Internal-Secret": env.INTERNAL_SECRET ?? "" },
-      })
-    );
+    const secret = env.INTERNAL_SECRET ?? "";
 
-    const body = await res.text();
-    console.log(`Cleanup: ${res.status} ${body}`);
+    // Daily cleanup at 3 AM UTC
+    if (event.cron === "0 3 * * *") {
+      const res = await sendMessage(stub, secret, { type: "cleanup" });
+      console.log(`Cleanup: ${res.status} ${await res.text()}`);
+    }
+
+    // Life scheduler every 15 minutes — check which cycles are due and enqueue them
+    if (event.cron === "*/15 * * * *") {
+      const res = await sendMessage(stub, secret, {
+        type: "life_scheduler_check",
+      });
+
+      if (!res.ok) {
+        console.error(`Scheduler check failed: ${res.status} ${await res.text()}`);
+        return;
+      }
+
+      const body = (await res.json()) as {
+        cycles: { user_id: string; cycle: string }[];
+      };
+      const cycles = body.cycles ?? [];
+
+      if (cycles.length === 0) {
+        console.log("Scheduler: no cycles due");
+        return;
+      }
+
+      // Enqueue each user/cycle as a separate queue message
+      for (const cycle of cycles) {
+        await env.SCHEDULER_QUEUE.send({
+          type: "life_scheduler_run",
+          data: { user_id: cycle.user_id, cycle: cycle.cycle },
+        });
+      }
+
+      console.log(`Scheduler: enqueued ${cycles.length} cycle(s)`);
+    }
+  },
+
+  // Queue consumer — processes one message at a time
+  async queue(
+    batch: MessageBatch<InternalMessage>,
+    env: Env
+  ): Promise<void> {
+    const stub = getContainer(env.API_CONTAINER);
+
+    try {
+      await stub.startAndWaitForPorts();
+    } catch (e) {
+      console.error("Queue: container startup failed:", e);
+      batch.retryAll();
+      return;
+    }
+
+    const secret = env.INTERNAL_SECRET ?? "";
+
+    for (const msg of batch.messages) {
+      try {
+        const res = await sendMessage(stub, secret, msg.body);
+        const text = await res.text();
+
+        if (res.ok) {
+          console.log(`Queue [${msg.body.type}]: ${res.status} ${text}`);
+          msg.ack();
+        } else {
+          console.error(`Queue [${msg.body.type}]: ${res.status} ${text}`);
+          msg.retry();
+        }
+      } catch (e) {
+        console.error(`Queue [${msg.body.type}]: error:`, e);
+        msg.retry();
+      }
+    }
   },
 };
