@@ -109,6 +109,15 @@ jobs:
         working-directory: workers/api-container
         run: bun install
 
+      - name: Ensure Cloudflare Queues exist
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/api-container
+          command: queues create life-scheduler || true
+          packageManager: bun
+
       - name: Deploy API Container
         uses: cloudflare/wrangler-action@v3
         with:
