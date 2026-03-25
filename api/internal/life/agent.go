@@ -4,6 +4,7 @@ package life
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
@@ -143,9 +144,96 @@ func (a *Agent) GCalClient() *GCalClient {
 }
 
 // ProcessActionableResponse is called after a user responds to an actionable.
-// It logs the resolution and, in future phases, may trigger follow-up agent actions.
-func (a *Agent) ProcessActionableResponse(ctx context.Context, userID string, actionable ActionableRecord, response string) error {
+// It feeds the response back to the agent in the scheduler conversation so the
+// agent can take follow-up actions (update calendar, create tasks, etc.).
+func (a *Agent) ProcessActionableResponse(ctx context.Context, db *sql.DB, userID string, actionable ActionableRecord, response string) error {
 	log.Printf("life agent: actionable %q (id=%s) resolved by user %s: %s",
 		actionable.Title, actionable.ID, userID, response)
+
+	// Build a prompt summarizing what happened
+	prompt := fmt.Sprintf(
+		"The user responded to the actionable \"%s\" (type: %s).\nTheir response: %s\n\n"+
+			"Based on this response, take any appropriate follow-up actions: update calendar events, "+
+			"create tasks, adjust routines, save preferences to memory, etc. "+
+			"Use your tools — do NOT just acknowledge in text. If no action is needed, that's fine too.",
+		actionable.Title, actionable.Type, response,
+	)
+
+	// Find the scheduler conversation for context
+	var convID string
+	err := db.QueryRowContext(ctx,
+		`SELECT id FROM life_conversations WHERE user_id = $1 AND channel = 'scheduler' ORDER BY updated_at DESC LIMIT 1`,
+		userID,
+	).Scan(&convID)
+	if err != nil {
+		// No scheduler conversation — run without history
+		convID = ""
+	}
+
+	// Load minimal history from the scheduler conversation
+	var history []Message
+	if convID != "" {
+		rows, err := db.QueryContext(ctx,
+			`SELECT role, content FROM life_messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 10`,
+			convID,
+		)
+		if err == nil {
+			for rows.Next() {
+				var m Message
+				if err := rows.Scan(&m.Role, &m.Content); err == nil {
+					history = append(history, m)
+				}
+			}
+			rows.Close()
+			// Reverse to oldest-first
+			for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
+				history[i], history[j] = history[j], history[i]
+			}
+		}
+	}
+
+	// Load user context
+	var profile Profile
+	var wakeTime, sleepTime sql.NullString
+	_ = db.QueryRowContext(ctx,
+		`SELECT timezone, wake_time, sleep_time FROM life_profiles WHERE user_id = $1`,
+		userID,
+	).Scan(&profile.Timezone, &wakeTime, &sleepTime)
+	if wakeTime.Valid {
+		profile.WakeTime = wakeTime.String
+	}
+	if sleepTime.Valid {
+		profile.SleepTime = sleepTime.String
+	}
+
+	memRows, _ := db.QueryContext(ctx,
+		`SELECT id, category, content FROM life_memories WHERE user_id = $1 AND active = TRUE`, userID)
+	var memories []Memory
+	if memRows != nil {
+		for memRows.Next() {
+			var m Memory
+			if err := memRows.Scan(&m.ID, &m.Category, &m.Content); err == nil {
+				memories = append(memories, m)
+			}
+		}
+		memRows.Close()
+	}
+
+	// Call the agent with auto-approve so it can act immediately
+	result, err := a.Chat(ctx, ChatRequest{
+		UserID:      userID,
+		Message:     prompt,
+		History:     history,
+		Memories:    memories,
+		Profile:     &profile,
+		AutoApprove: true,
+		SystemContext: "The user just responded to an actionable. Take follow-up actions using tools if appropriate. " +
+			"Do NOT create new actionables asking the same question. Focus on executing the user's choice.",
+	})
+	if err != nil {
+		return fmt.Errorf("process actionable response: %w", err)
+	}
+
+	log.Printf("life agent: actionable response processed — %d effects", len(result.Effects))
 	return nil
 }

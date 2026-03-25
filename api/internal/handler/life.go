@@ -1100,19 +1100,21 @@ func deriveConversationTitle(msg string) string {
 
 // lifeActionableRecord is the JSON representation of a life_actionables row.
 type lifeActionableRecord struct {
-	ID          string          `json:"id"`
-	UserID      string          `json:"userId"`
-	Type        string          `json:"type"`
-	Status      string          `json:"status"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Options     json.RawMessage `json:"options,omitempty"`
-	Response    json.RawMessage `json:"response,omitempty"`
-	DueAt       *string         `json:"dueAt,omitempty"`
-	SnoozedUntil *string        `json:"snoozedUntil,omitempty"`
-	RoutineID   *string         `json:"routineId,omitempty"`
-	CreatedAt   string          `json:"createdAt"`
-	ResolvedAt  *string         `json:"resolvedAt,omitempty"`
+	ID            string          `json:"id"`
+	UserID        string          `json:"userId"`
+	Type          string          `json:"type"`
+	Status        string          `json:"status"`
+	Title         string          `json:"title"`
+	Description   string          `json:"description"`
+	Options       json.RawMessage `json:"options,omitempty"`
+	Response      json.RawMessage `json:"response,omitempty"`
+	DueAt         *string         `json:"dueAt,omitempty"`
+	SnoozedUntil  *string         `json:"snoozedUntil,omitempty"`
+	RoutineID     *string         `json:"routineId,omitempty"`
+	ActionType    string          `json:"actionType"`
+	ActionPayload json.RawMessage `json:"actionPayload,omitempty"`
+	CreatedAt     string          `json:"createdAt"`
+	ResolvedAt    *string         `json:"resolvedAt,omitempty"`
 }
 
 // ListLifeActionables handles GET /life/actionables?status=pending.
@@ -1135,7 +1137,7 @@ func ListLifeActionables(db *sql.DB) http.HandlerFunc {
 			rows, err = db.QueryContext(r.Context(), `
 				SELECT id, user_id, type, status, title, description,
 				       options, response, due_at, snoozed_until, routine_id,
-				       created_at, resolved_at
+				       action_type, action_payload, created_at, resolved_at
 				FROM life_actionables
 				WHERE user_id = $1 AND status = $2
 				ORDER BY created_at DESC
@@ -1144,7 +1146,7 @@ func ListLifeActionables(db *sql.DB) http.HandlerFunc {
 			rows, err = db.QueryContext(r.Context(), `
 				SELECT id, user_id, type, status, title, description,
 				       options, response, due_at, snoozed_until, routine_id,
-				       created_at, resolved_at
+				       action_type, action_payload, created_at, resolved_at
 				FROM life_actionables
 				WHERE user_id = $1
 				ORDER BY created_at DESC
@@ -1159,16 +1161,16 @@ func ListLifeActionables(db *sql.DB) http.HandlerFunc {
 		actionables := make([]lifeActionableRecord, 0)
 		for rows.Next() {
 			var a lifeActionableRecord
-			var options, response []byte
+			var options, response, actionPayload []byte
 			var dueAt, snoozedUntil sql.NullTime
-			var routineID sql.NullString
+			var routineID, actionType sql.NullString
 			var createdAt time.Time
 			var resolvedAt sql.NullTime
 
 			if err := rows.Scan(
 				&a.ID, &a.UserID, &a.Type, &a.Status, &a.Title, &a.Description,
 				&options, &response, &dueAt, &snoozedUntil, &routineID,
-				&createdAt, &resolvedAt,
+				&actionType, &actionPayload, &createdAt, &resolvedAt,
 			); err != nil {
 				http.Error(w, `{"error":"failed to read actionable"}`, http.StatusInternalServerError)
 				return
@@ -1190,6 +1192,12 @@ func ListLifeActionables(db *sql.DB) http.HandlerFunc {
 			}
 			if routineID.Valid {
 				a.RoutineID = &routineID.String
+			}
+			if actionType.Valid {
+				a.ActionType = actionType.String
+			}
+			if len(actionPayload) > 0 {
+				a.ActionPayload = json.RawMessage(actionPayload)
 			}
 			a.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 			if resolvedAt.Valid {
@@ -1308,16 +1316,39 @@ func RespondToActionable(db *sql.DB, agent *life.Agent) http.HandlerFunc {
 			return
 		}
 
-		// If confirmed and there's a pending action, execute it.
+		// If confirmed and there's a pending action, execute it (legacy deferred actions).
 		if req.Action == "confirm" || req.Action == "choose" {
 			var actionType sql.NullString
 			var actionPayload sql.NullString
 			if err := db.QueryRowContext(r.Context(),
 				`SELECT action_type, action_payload FROM life_actionables WHERE id = $1`,
 				actionableID,
-			).Scan(&actionType, &actionPayload); err == nil && actionType.Valid && actionType.String != "" {
+			).Scan(&actionType, &actionPayload); err == nil && actionType.Valid && actionType.String != "" && actionType.String != "none" {
 				executeActionableAction(r.Context(), db, agent.GCalClient(), userID, actionType.String, actionPayload.String)
 			}
+		}
+
+		// Feed the response to the agent so it can take follow-up actions
+		// (update calendar, create tasks, etc.). Run in background so we
+		// don't block the HTTP response.
+		if req.Action != "dismiss" {
+			go func() {
+				// Load actionable details for the agent
+				var title, aType string
+				_ = db.QueryRowContext(context.Background(),
+					`SELECT title, type FROM life_actionables WHERE id = $1`,
+					actionableID,
+				).Scan(&title, &aType)
+
+				responseStr, _ := json.Marshal(responseData)
+				if err := agent.ProcessActionableResponse(
+					context.Background(), db, userID,
+					life.ActionableRecord{ID: actionableID, Type: aType, Title: title},
+					string(responseStr),
+				); err != nil {
+					log.Printf("life: process actionable response %s: %v", actionableID, err)
+				}
+			}()
 		}
 
 		json.NewEncoder(w).Encode(map[string]any{

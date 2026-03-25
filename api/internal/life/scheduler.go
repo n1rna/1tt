@@ -234,30 +234,8 @@ func runCycleForUser(ctx context.Context, db *sql.DB, agent *Agent, user Schedul
 		}
 	}
 
-	// ── 2. Load last 20 messages ─────────────────────────────────────────
-	histRows, err := db.QueryContext(ctx,
-		`SELECT role, content FROM life_messages
-		 WHERE conversation_id = $1
-		 ORDER BY created_at DESC LIMIT 20`,
-		convID,
-	)
-	if err != nil {
-		return fmt.Errorf("load history: %w", err)
-	}
+	// ── 2. No history — each cycle starts fresh to avoid stale context ───
 	var history []Message
-	for histRows.Next() {
-		var m Message
-		if err := histRows.Scan(&m.Role, &m.Content); err != nil {
-			histRows.Close()
-			return fmt.Errorf("scan history: %w", err)
-		}
-		history = append(history, m)
-	}
-	histRows.Close()
-	// Reverse to get oldest-first order
-	for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
-		history[i], history[j] = history[j], history[i]
-	}
 
 	// ── 3. Load memories ─────────────────────────────────────────────────
 	memRows, err := db.QueryContext(ctx,
@@ -368,15 +346,16 @@ func runCycleForUser(ctx context.Context, db *sql.DB, agent *Agent, user Schedul
 	}
 
 	// ── 10. Call the agent ───────────────────────────────────────────────
-	systemCtx := fmt.Sprintf(`This is an automated scheduler cycle (%s). You are running as a background planning agent.
+	systemCtx := fmt.Sprintf(`This is an automated scheduler cycle (%s). You are a background planning agent.
 
-IMPORTANT RULES:
-- Create actionables for ALL user interactions. Do NOT ask questions in chat text — the user won't see this conversation directly.
-- Use the appropriate actionable types: "confirm" for yes/no, "choose" for multiple options, "input" for free-text, "info" for notifications.
-- Prefix actionable titles with the cycle context (e.g., "[Tomorrow] ..." or "[Morning] ..." or "[Review] ...").
-- Be specific and personal — reference the user's actual routines, calendar events, memories, and preferences.
-- Don't repeat actionables that are already pending. The user has %d pending actionable(s).
-- Keep it practical — 3-6 actionables per cycle is ideal. Don't overwhelm.`, cycle, pendingCount)
+CRITICAL: You MUST call the create_actionable tool. The user will NEVER see your text responses — only actionables appear in their UI. If you respond with text only, the user sees NOTHING.
+
+Rules:
+- Call create_actionable for every item. Use type "info" for briefings, "confirm" for yes/no, "choose" for options, "input" for questions.
+- Optionally add template and data fields for rich display (template: daily_plan, routine_check, suggestion, etc.)
+- Aim for 3-6 actionables per cycle. Be specific to the user's actual data.
+- The user has %d pending actionable(s). Don't duplicate.
+- ALWAYS use tools. NEVER respond with just text.`, cycle, pendingCount)
 
 	chatResult, err := agent.Chat(ctx, ChatRequest{
 		UserID:                  userID,
@@ -394,6 +373,9 @@ IMPORTANT RULES:
 	if err != nil {
 		return fmt.Errorf("agent chat: %w", err)
 	}
+
+	log.Printf("scheduler: agent response for %s/%s — %d effects, text: %s",
+		userID, cycle, len(chatResult.Effects), truncate(chatResult.Text, 500))
 
 	// ── 11. Save assistant response ──────────────────────────────────────
 	var effects []map[string]any
@@ -451,6 +433,13 @@ IMPORTANT RULES:
 
 	log.Printf("scheduler: completed %s for user %s — %d effects", cycle, userID, len(chatResult.Effects))
 	return nil
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 // schedulerPrompt builds the cycle-specific prompt sent to the agent.

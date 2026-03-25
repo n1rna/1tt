@@ -165,8 +165,57 @@ export interface LifeActionable {
   snoozedUntil: string | null;
   routineId: string | null;
   actionType: string;
+  actionPayload?: ActionablePayload;
   createdAt: string;
   resolvedAt: string | null;
+}
+
+// Semantic actionable type stored in actionPayload.template
+export type ActionableTemplate =
+  | "daily_plan" | "daily_review" | "routine_check"
+  | "meal_choice" | "schedule_pick" | "reminder"
+  | "preference" | "task_roundup" | "streak" | "suggestion";
+
+export interface ActionablePayload {
+  template?: ActionableTemplate;
+  data?: ActionableData;
+  // Legacy fields
+  sections?: { icon?: string; title: string; items: string[] }[];
+  [key: string]: unknown;
+}
+
+// Union of all possible data shapes
+export type ActionableData = {
+  // daily_plan
+  sections?: { icon?: string; title: string; items: string[] }[];
+  // daily_review
+  completed?: string[];
+  missed?: string[];
+  question?: string;
+  // routine_check
+  routine_name?: string;
+  routine_id?: string;
+  scheduled_time?: string;
+  details?: string;
+  // meal_choice / schedule_pick
+  meal?: string;
+  context?: string;
+  options?: { id: string; label: string; detail?: string }[];
+  // reminder
+  message?: string;
+  time?: string;
+  // preference
+  placeholder?: string;
+  // task_roundup
+  pending?: { title: string; due?: string }[];
+  completed_today?: string[];
+  // streak
+  count?: number;
+  unit?: string;
+  best?: number;
+  // suggestion
+  suggestion?: string;
+  reasoning?: string;
 }
 
 export async function listLifeActionables(

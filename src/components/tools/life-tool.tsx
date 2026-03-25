@@ -1664,6 +1664,283 @@ const ACTION_TYPE_META: Record<string, { label: string; icon: React.ReactNode }>
   create_task: { label: "Create task", icon: <ListTodo className="h-3.5 w-3.5 text-orange-500" /> },
 };
 
+const SECTION_ICONS: Record<string, React.ReactNode> = {
+  calendar: <CalendarDays className="size-3.5" />,
+  check: <Check className="size-3.5" />,
+  target: <Target className="size-3.5" />,
+  brain: <Brain className="size-3.5" />,
+  dumbbell: <Dumbbell className="size-3.5" />,
+  utensils: <Sun className="size-3.5" />,
+  phone: <Phone className="size-3.5" />,
+  star: <Sparkles className="size-3.5" />,
+  clock: <Clock className="size-3.5" />,
+  alert: <AlertCircle className="size-3.5" />,
+  "map-pin": <MapPin className="size-3.5" />,
+  list: <ListTodo className="size-3.5" />,
+};
+
+function ActionableSections({ sections }: { sections: { icon?: string; title: string; items: string[] }[] }) {
+  return (
+    <div className="mt-2 space-y-3">
+      {sections.map((section, i) => (
+        <div key={i}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-muted-foreground/60">
+              {section.icon ? (SECTION_ICONS[section.icon] ?? <ListTodo className="size-3.5" />) : <ListTodo className="size-3.5" />}
+            </span>
+            <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">{section.title}</span>
+          </div>
+          <ul className="space-y-0.5 pl-5">
+            {section.items.map((item, j) => (
+              <li key={j} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+                <span className="text-muted-foreground/30 mt-1.5 shrink-0 size-1 rounded-full bg-current" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Guess an icon from a section title for legacy actionables that don't have structured sections.
+const SECTION_TITLE_ICON_MAP: [RegExp, string][] = [
+  [/calendar|event|schedule/i, "calendar"],
+  [/task|todo|to-do/i, "check"],
+  [/routine|habit|gym|workout|exercise/i, "dumbbell"],
+  [/notable|highlight|remind/i, "star"],
+  [/goal|target|focus/i, "target"],
+  [/meal|food|breakfast|lunch|dinner|calori/i, "utensils"],
+  [/call|phone|contact/i, "phone"],
+  [/time|clock|deadline|due/i, "clock"],
+  [/warn|alert|urgent|overdue/i, "alert"],
+  [/location|place|map/i, "map-pin"],
+];
+
+function guessIconForTitle(title: string): string {
+  for (const [re, icon] of SECTION_TITLE_ICON_MAP) {
+    if (re.test(title)) return icon;
+  }
+  return "list";
+}
+
+/** Parse a markdown-style description into structured sections.
+ *  Detects patterns like: **emoji Title:** followed by bullet lines (• or -).
+ *  Returns null if the description doesn't look structured. */
+function parseSectionsFromDescription(desc: string): { icon?: string; title: string; items: string[] }[] | null {
+  const lines = desc.split("\n").map((l) => l.trim()).filter(Boolean);
+  const sections: { icon?: string; title: string; items: string[] }[] = [];
+  let current: { icon?: string; title: string; items: string[] } | null = null;
+
+  for (const line of lines) {
+    // Match section headers like: **📅 Calendar Events:** or **Tasks:** or ## Tasks
+    const headerMatch = line.match(/^\*\*\s*(?:\p{Emoji_Presentation}\s*)?(.+?):\s*\*\*$/u)
+      ?? line.match(/^##\s+(?:\p{Emoji_Presentation}\s*)?(.+)$/u);
+    if (headerMatch) {
+      if (current && current.items.length > 0) sections.push(current);
+      const title = headerMatch[1].trim();
+      current = { icon: guessIconForTitle(title), title, items: [] };
+      continue;
+    }
+
+    // Match bullet items: • item, - item, * item
+    const bulletMatch = line.match(/^[•\-*]\s+(.+)$/);
+    if (bulletMatch && current) {
+      current.items.push(bulletMatch[1].replace(/\*\*/g, "").trim());
+      continue;
+    }
+
+    // Non-header, non-bullet line while we have a current section — treat as item
+    if (current && line.length > 0 && !line.startsWith("**")) {
+      current.items.push(line.replace(/\*\*/g, "").trim());
+    }
+  }
+  if (current && current.items.length > 0) sections.push(current);
+
+  // Only return if we found at least 2 sections (otherwise it's probably just text)
+  return sections.length >= 2 ? sections : null;
+}
+
+const TEMPLATE_META: Record<string, { label: string; icon: React.ReactNode }> = {
+  daily_plan:    { label: "Daily Plan",       icon: <Sun className="h-3.5 w-3.5 text-amber-500" /> },
+  daily_review:  { label: "Daily Review",     icon: <Pencil className="h-3.5 w-3.5 text-violet-500" /> },
+  routine_check: { label: "Routine Check",    icon: <Repeat className="h-3.5 w-3.5 text-blue-500" /> },
+  meal_choice:   { label: "Meal Choice",      icon: <Sun className="h-3.5 w-3.5 text-orange-500" /> },
+  schedule_pick: { label: "Schedule",         icon: <CalendarDays className="h-3.5 w-3.5 text-indigo-500" /> },
+  reminder:      { label: "Reminder",         icon: <Clock className="h-3.5 w-3.5 text-rose-500" /> },
+  preference:    { label: "Quick Question",   icon: <MessageSquare className="h-3.5 w-3.5 text-sky-500" /> },
+  task_roundup:  { label: "Task Summary",     icon: <ListTodo className="h-3.5 w-3.5 text-emerald-500" /> },
+  streak:        { label: "Streak",           icon: <Target className="h-3.5 w-3.5 text-orange-500" /> },
+  suggestion:    { label: "Suggestion",       icon: <Sparkles className="h-3.5 w-3.5 text-primary" /> },
+};
+
+function ActionableContent({ actionable }: { actionable: LifeActionable }) {
+  const tpl = actionable.actionPayload?.template;
+  const d = actionable.actionPayload?.data;
+
+  // ── daily_plan: sections-based layout ──
+  if (tpl === "daily_plan" && d?.sections) {
+    return <ActionableSections sections={d.sections} />;
+  }
+
+  // ── daily_review: completed/missed + question ──
+  if (tpl === "daily_review" && d) {
+    return (
+      <div className="mt-2 space-y-2">
+        {d.completed && d.completed.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Check className="size-3 text-green-500" />
+              <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">Completed</span>
+            </div>
+            <ul className="space-y-0.5 pl-5">
+              {d.completed.map((item, i) => (
+                <li key={i} className="text-xs text-muted-foreground">{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {d.missed && d.missed.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <AlertCircle className="size-3 text-amber-500" />
+              <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">Missed</span>
+            </div>
+            <ul className="space-y-0.5 pl-5">
+              {d.missed.map((item, i) => (
+                <li key={i} className="text-xs text-muted-foreground">{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {d.question && <p className="text-xs text-muted-foreground/70 italic mt-1">{d.question}</p>}
+      </div>
+    );
+  }
+
+  // ── routine_check ──
+  if (tpl === "routine_check" && d) {
+    return (
+      <div className="mt-1.5 space-y-1">
+        {d.scheduled_time && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="size-3" />
+            <span>{d.scheduled_time}</span>
+          </div>
+        )}
+        {d.details && <p className="text-xs text-muted-foreground/70">{d.details}</p>}
+      </div>
+    );
+  }
+
+  // ── reminder ──
+  if (tpl === "reminder" && d) {
+    return (
+      <div className="mt-1.5 space-y-1">
+        {d.message && <p className="text-xs text-foreground/80">{d.message}</p>}
+        {d.time && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="size-3" />
+            <span>{d.time}</span>
+          </div>
+        )}
+        {d.context && <p className="text-[11px] text-muted-foreground/60">{d.context}</p>}
+      </div>
+    );
+  }
+
+  // ── task_roundup ──
+  if (tpl === "task_roundup" && d) {
+    return (
+      <div className="mt-2 space-y-2">
+        {d.pending && d.pending.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <ListTodo className="size-3 text-orange-500" />
+              <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">Pending</span>
+            </div>
+            <ul className="space-y-0.5 pl-5">
+              {d.pending.map((t, i) => (
+                <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span>{t.title}</span>
+                  {t.due && <span className="text-[10px] text-muted-foreground/50">· {t.due}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {d.completed_today && d.completed_today.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Check className="size-3 text-green-500" />
+              <span className="text-[11px] font-semibold text-foreground/80 uppercase tracking-wider">Done Today</span>
+            </div>
+            <ul className="space-y-0.5 pl-5">
+              {d.completed_today.map((item, i) => (
+                <li key={i} className="text-xs text-muted-foreground/60 line-through">{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── streak ──
+  if (tpl === "streak" && d) {
+    return (
+      <div className="mt-2 flex items-center gap-3">
+        <div className="flex items-center justify-center size-10 rounded-full bg-primary/10">
+          <span className="text-lg font-bold text-primary">{d.count ?? 0}</span>
+        </div>
+        <div>
+          {d.message && <p className="text-xs text-foreground/80">{d.message}</p>}
+          {d.best != null && d.best > 0 && (
+            <p className="text-[10px] text-muted-foreground/50">Personal best: {d.best} {d.unit ?? "days"}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── suggestion ──
+  if (tpl === "suggestion" && d) {
+    return (
+      <div className="mt-1.5 space-y-1">
+        {d.suggestion && <p className="text-xs text-foreground/80">{d.suggestion}</p>}
+        {d.reasoning && <p className="text-[11px] text-muted-foreground/50 italic">{d.reasoning}</p>}
+      </div>
+    );
+  }
+
+  // ── preference ──
+  if (tpl === "preference" && d) {
+    return (
+      <div className="mt-1.5 space-y-1">
+        {d.question && <p className="text-xs text-foreground/80">{d.question}</p>}
+        {d.context && <p className="text-[11px] text-muted-foreground/50">{d.context}</p>}
+      </div>
+    );
+  }
+
+  // ── schedule_pick / meal_choice: options are rendered by the action area, just show context ──
+  if ((tpl === "schedule_pick" || tpl === "meal_choice") && d?.context) {
+    return <p className="text-xs text-muted-foreground/70 mt-1">{d.context}</p>;
+  }
+
+  // ── Legacy fallback: try parsing sections from description ──
+  if (actionable.actionPayload?.sections?.length) {
+    return <ActionableSections sections={actionable.actionPayload.sections} />;
+  }
+  if (actionable.description) {
+    const parsed = parseSectionsFromDescription(actionable.description);
+    if (parsed) return <ActionableSections sections={parsed} />;
+    return <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{actionable.description}</p>;
+  }
+  return null;
+}
+
 function ActionableCard({
   actionable,
   onRespond,
@@ -1719,26 +1996,26 @@ function ActionableCard({
     )}>
       {/* Main row */}
       <div className="flex items-start gap-3 p-4 pb-0">
-        {/* Action type icon */}
+        {/* Template icon */}
         <div className="mt-0.5 shrink-0">
-          {actionMeta?.icon ?? (
-            actionable.type === "info"
+          {TEMPLATE_META[actionable.actionPayload?.template ?? ""]?.icon
+            ?? actionMeta?.icon
+            ?? (actionable.type === "info"
               ? <Info className="h-3.5 w-3.5 text-blue-500" />
               : <Sparkles className="h-3.5 w-3.5 text-primary" />
-          )}
+            )}
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Action label */}
-          {actionMeta && (
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">
-              {actionMeta.label}
-            </p>
-          )}
+          {/* Template label */}
+          {(() => {
+            const label = TEMPLATE_META[actionable.actionPayload?.template ?? ""]?.label ?? actionMeta?.label;
+            return label ? (
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
+            ) : null;
+          })()}
           <p className="text-sm font-medium text-foreground leading-snug">{actionable.title}</p>
-          {actionable.description && (
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{actionable.description}</p>
-          )}
+          <ActionableContent actionable={actionable} />
 
           {/* Meta */}
           <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
@@ -1779,10 +2056,10 @@ function ActionableCard({
           </div>
         )}
 
-        {actionable.type === "choose" && actionable.options && (
+        {actionable.type === "choose" && (actionable.options ?? actionable.actionPayload?.data?.options) && (
           <div className="space-y-2">
             <div className="grid gap-1.5">
-              {actionable.options.map((opt) => (
+              {(actionable.options ?? actionable.actionPayload?.data?.options ?? []).map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => {
@@ -1820,7 +2097,7 @@ function ActionableCard({
                 type="text"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type your answer…"
+                placeholder={actionable.actionPayload?.data?.placeholder ?? "Type your answer…"}
                 className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && textInput.trim()) {

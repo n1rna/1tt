@@ -20,22 +20,31 @@ func toolDefs() []llms.Tool {
 			Type: "function",
 			Function: &llms.FunctionDefinition{
 				Name:        "create_actionable",
-				Description: "Create an actionable item that surfaces to the user for a decision or acknowledgement. Use this when the user needs to confirm, choose, provide input, or be informed about something.",
+				Description: "Create an actionable item that surfaces to the user for a decision or acknowledgement.",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"type": map[string]any{
 							"type":        "string",
 							"enum":        []string{"confirm", "choose", "input", "info"},
-							"description": "confirm = yes/no approval; choose = pick from options; input = free-text response; info = read-only notice",
+							"description": "confirm = yes/no; choose = pick from options; input = free-text response; info = read-only notice",
 						},
 						"title": map[string]any{
 							"type":        "string",
-							"description": "Short headline for the actionable (max ~80 chars)",
+							"description": "Short headline (max ~80 chars)",
 						},
 						"description": map[string]any{
 							"type":        "string",
-							"description": "Longer explanation shown to the user",
+							"description": "Explanation shown to the user",
+						},
+						"template": map[string]any{
+							"type":        "string",
+							"enum":        []string{"daily_plan", "daily_review", "routine_check", "meal_choice", "schedule_pick", "reminder", "preference", "task_roundup", "streak", "suggestion"},
+							"description": "Optional visual template for rich display",
+						},
+						"data": map[string]any{
+							"type":        "object",
+							"description": "Optional structured data for the template",
 						},
 						"options": map[string]any{
 							"type":        "array",
@@ -52,16 +61,16 @@ func toolDefs() []llms.Tool {
 						},
 						"due_at": map[string]any{
 							"type":        "string",
-							"description": "Optional ISO-8601 deadline for the actionable",
+							"description": "Optional ISO-8601 deadline",
 						},
 						"action_type": map[string]any{
 							"type":        "string",
 							"enum":        []string{"create_routine", "create_memory", "create_calendar_event", "delete_calendar_event", "create_task", "none"},
-							"description": "Deferred action to execute when the user confirms. The action_payload must match the action_type.",
+							"description": "Deferred action to execute when the user confirms.",
 						},
 						"action_payload": map[string]any{
 							"type":        "object",
-							"description": "Data for the deferred action. create_routine: {name, type, description, schedule, config}. create_calendar_event: {summary, start, end, description, location}. create_task: {title, notes, due}. create_memory: {content, category}.",
+							"description": "Data for the deferred action.",
 						},
 					},
 					"required": []string{"type", "title"},
@@ -598,11 +607,25 @@ func toolCreateActionable(ctx context.Context, db *sql.DB, userID string, args m
 		}
 	}
 
-	// action_type + action_payload — deferred action to execute on confirmation
+	// action_type + action_payload
 	actionType, _ := args["action_type"].(string)
+
+	// Build action_payload: merge deferred payload + template + data
+	payloadMap := map[string]any{}
+	if ap, ok := args["action_payload"].(map[string]any); ok {
+		for k, v := range ap {
+			payloadMap[k] = v
+		}
+	}
+	if tpl, ok := args["template"].(string); ok && tpl != "" {
+		payloadMap["template"] = tpl
+	}
+	if data, ok := args["data"].(map[string]any); ok {
+		payloadMap["data"] = data
+	}
 	var actionPayloadJSON []byte
-	if ap, ok := args["action_payload"]; ok && ap != nil {
-		b, err := json.Marshal(ap)
+	if len(payloadMap) > 0 {
+		b, err := json.Marshal(payloadMap)
 		if err != nil {
 			return jsonError("failed to encode action_payload: " + err.Error())
 		}
